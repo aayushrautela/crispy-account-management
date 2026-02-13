@@ -18,15 +18,25 @@ export default function AuthLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-900 text-white flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-8">
-        <div className="flex flex-col items-center gap-4">
-          <img src={logo} alt="Crispy" className="w-16 h-16" />
-          <h1 className="text-4xl font-black tracking-tight text-white">Crispy</h1>
+    <div 
+      className="min-h-screen text-white flex flex-col p-4 relative bg-cover bg-center bg-no-repeat"
+      style={{ backgroundImage: 'url(/backdrop.png)' }}
+    >
+      {/* Dark overlay for better readability */}
+      <div className="absolute inset-0 bg-stone-900/80" />
+      
+      {/* Logo in top left */}
+      <div className="relative z-10 flex items-center gap-3">
+        <img src={logo} alt="Crispy" className="w-10 h-10" />
+        <h1 className="text-2xl font-black tracking-tight text-white">Crispy</h1>
+      </div>
+
+      {/* Main content moved slightly up */}
+      <div className="relative z-10 flex-1 flex flex-col items-center justify-start pt-[10vh]">
+        <div className="w-full max-w-md">
+          <Outlet />
         </div>
-        <Outlet />
       </div>
     </div>
   );
 }
-

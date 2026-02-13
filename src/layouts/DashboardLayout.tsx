@@ -31,7 +31,7 @@ export default function DashboardLayout() {
   return (
     <div className="min-h-screen bg-stone-900 text-stone-50 flex">
       {/* Sidebar for Desktop */}
-      <aside className="hidden md:flex w-64 flex-col bg-stone-800 border-r border-stone-700">
+      <aside className="hidden md:flex w-64 flex-col bg-stone-800 border-r border-stone-700 sticky top-0 h-screen overflow-y-auto">
         <div className="p-6 flex items-center gap-3">
           <img src={logo} alt="Crispy" className="w-10 h-10" />
           <span className="text-2xl font-black tracking-tight">Crispy</span>

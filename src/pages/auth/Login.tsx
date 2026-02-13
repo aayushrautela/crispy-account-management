@@ -34,7 +34,7 @@ export default function Login() {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto">
+    <div className="w-full">
       <div className="mb-8 text-center">
         <h1 className="text-3xl font-bold text-white tracking-tight">Welcome Back</h1>
         <p className="text-sm text-stone-500 mt-1">Sign in to manage your account</p>

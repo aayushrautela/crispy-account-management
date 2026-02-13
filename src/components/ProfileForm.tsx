@@ -1,10 +1,10 @@
-import React, { useState, useRef } from 'react';
-import { Camera, User as UserIcon } from 'lucide-react';
+import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
-import { uploadAvatar } from '../lib/storage';
+import { AvatarPicker } from './AvatarPicker';
 import type { Profile } from '../types';
+import type { AvatarSource } from '../lib/avatar';
 import { useAuthStore } from '../store/useAuthStore';
 
 interface ProfileFormProps {
@@ -13,22 +13,40 @@ interface ProfileFormProps {
   onCancel: () => void;
 }
 
+function parseInitialAvatarSource(avatar: string | null): AvatarSource | undefined {
+  if (!avatar) return undefined;
+  
+  if (avatar.startsWith('dicebear:')) {
+    const [, style, seed] = avatar.split(':');
+    return {
+      type: 'dicebear',
+      style: style as AvatarSource['style'],
+      seed,
+      url: null,
+    };
+  }
+  
+  return {
+    type: 'upload',
+    url: avatar,
+  };
+}
+
+function serializeAvatarSource(source: AvatarSource): string | null {
+  if (source.type === 'dicebear' && source.style && source.seed) {
+    return `dicebear:${source.style}:${source.seed}`;
+  }
+  return source.url;
+}
+
 export const ProfileForm: React.FC<ProfileFormProps> = ({ initialData, onSuccess, onCancel }) => {
   const { user } = useAuthStore();
   const [name, setName] = useState(initialData?.name || '');
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(initialData?.avatar || null);
+  const [avatarSource, setAvatarSource] = useState<AvatarSource | undefined>(
+    parseInitialAvatarSource(initialData?.avatar || null)
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      setAvatarFile(file);
-      setAvatarPreview(URL.createObjectURL(file));
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,35 +56,23 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ initialData, onSuccess
     setError(null);
 
     try {
-      let avatarUrl = initialData?.avatar || null;
-
-      if (avatarFile) {
-        const url = await uploadAvatar(avatarFile, user.id);
-        if (url) {
-          avatarUrl = url;
-        } else {
-            throw new Error('Failed to upload avatar');
-        }
-      }
+      const avatarUrl = avatarSource ? serializeAvatarSource(avatarSource) : null;
 
       if (initialData) {
-        // Update
         const { error: updateError } = await supabase
           .from('profiles')
-          .update({ name, avatar: avatarUrl })
+          .update({ name, avatar: avatarUrl, updated_at: new Date().toISOString() })
           .eq('id', initialData.id);
 
         if (updateError) throw updateError;
       } else {
-        // Create
-        // First get the current max order_index
         const { data: existingProfiles } = await supabase
-            .from('profiles')
-            .select('order_index')
-            .eq('account_id', user.id)
-            .order('order_index', { ascending: false })
-            .limit(1);
-        
+          .from('profiles')
+          .select('order_index')
+          .eq('account_id', user.id)
+          .order('order_index', { ascending: false })
+          .limit(1);
+
         const nextOrderIndex = (existingProfiles?.[0]?.order_index ?? -1) + 1;
 
         const { error: createError } = await supabase
@@ -75,16 +81,16 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ initialData, onSuccess
             account_id: user.id,
             name,
             avatar: avatarUrl,
-            order_index: nextOrderIndex
+            order_index: nextOrderIndex,
           });
 
         if (createError) throw createError;
       }
 
       onSuccess();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error saving profile:', err);
-      setError(err.message || 'Failed to save profile');
+      setError(err instanceof Error ? err.message : 'Failed to save profile');
     } finally {
       setLoading(false);
     }
@@ -93,29 +99,10 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ initialData, onSuccess
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="flex flex-col items-center gap-4">
-        <div 
-          className="relative group cursor-pointer w-24 h-24 rounded-full overflow-hidden bg-stone-800 border-2 border-stone-700 hover:border-blue-500 transition-colors"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          {avatarPreview ? (
-            <img src={avatarPreview} alt="Avatar preview" className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-stone-500">
-              <UserIcon size={32} />
-            </div>
-          )}
-          <div className="absolute inset-0 bg-stone-900/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-            <Camera className="w-6 h-6 text-white" />
-          </div>
-        </div>
-        <input 
-          type="file" 
-          ref={fileInputRef} 
-          onChange={handleFileChange} 
-          accept="image/*" 
-          className="hidden" 
+        <AvatarPicker
+          initialSource={avatarSource}
+          onChange={setAvatarSource}
         />
-        <p className="text-sm text-stone-400">Click to change avatar</p>
       </div>
 
       <div className="space-y-4">
@@ -135,7 +122,13 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ initialData, onSuccess
       )}
 
       <div className="flex flex-col md:flex-row justify-end gap-3 pt-4 border-t border-stone-800">
-        <Button type="button" variant="ghost" className="w-full md:w-auto" onClick={onCancel} disabled={loading}>
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full md:w-auto"
+          onClick={onCancel}
+          disabled={loading}
+        >
           Cancel
         </Button>
         <Button type="submit" className="w-full md:w-auto" isLoading={loading}>

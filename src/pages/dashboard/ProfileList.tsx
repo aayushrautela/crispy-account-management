@@ -6,6 +6,7 @@ import type { Profile } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { ProfileForm } from '../../components/ProfileForm';
+import { resolveAvatarUrl } from '../../lib/avatar';
 
 export default function ProfileList() {
   const { user } = useAuthStore();
@@ -95,12 +96,15 @@ export default function ProfileList() {
             className="flex items-center justify-between p-4 bg-stone-800 border border-stone-600 rounded-2xl hover:border-stone-500 hover:bg-stone-700 transition-all group shadow-xl shadow-black/10"
           >
             <div className="flex items-center gap-4 min-w-0">
-              <div className="w-14 h-14 rounded-xl bg-stone-800/50 border border-stone-700/50 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
-                {profile.avatar ? (
-                  <img src={profile.avatar} alt={profile.name} className="w-full h-full object-cover" />
-                ) : (
-                  <User size={28} className="text-stone-500" />
-                )}
+              <div className="w-14 h-14 rounded-full bg-stone-800/50 border border-stone-700/50 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+                {(() => {
+                  const avatarUrl = resolveAvatarUrl(profile.avatar);
+                  return avatarUrl ? (
+                    <img src={avatarUrl} alt={profile.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <User size={28} className="text-stone-500" />
+                  );
+                })()}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
