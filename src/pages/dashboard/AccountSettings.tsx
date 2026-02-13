@@ -4,7 +4,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
 import { Modal } from '../../components/ui/Modal';
-import { Shield, Key, Mail, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Key, Mail, AlertTriangle, CheckCircle } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useNavigate } from 'react-router-dom';
 
@@ -66,8 +66,8 @@ export default function AccountSettings() {
   return (
     <div className="max-w-2xl mx-auto space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-white">Account Settings</h1>
-        <p className="text-gray-400 mt-1">Manage your login and security preferences.</p>
+        <h1 className="text-2xl font-bold text-white tracking-tight">Account Settings</h1>
+        <p className="text-sm text-stone-500 mt-0.5">Manage your login and security preferences.</p>
       </div>
 
       {message && (
@@ -82,17 +82,15 @@ export default function AccountSettings() {
       )}
 
       <Card className="p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500">
-            <Mail size={24} />
-          </div>
+        <div className="flex items-center gap-4 mb-6">
+          <Mail className="text-blue-500 w-7 h-7" />
           <div>
-            <h2 className="text-xl font-semibold text-white">Email Address</h2>
-            <p className="text-sm text-gray-400">Update your account email</p>
+            <h2 className="text-lg font-bold text-white">Email</h2>
+            <p className="text-xs text-stone-500">Update your account login email</p>
           </div>
         </div>
 
-        <form onSubmit={handleUpdateEmail} className="space-y-4">
+        <form onSubmit={handleUpdateEmail} className="space-y-4 pt-4 border-t border-stone-800/50">
           <Input
             label="New Email Address"
             type="email"
@@ -103,6 +101,8 @@ export default function AccountSettings() {
           <div className="flex justify-end">
             <Button 
               type="submit" 
+              fullWidth
+              className="md:w-auto h-9 text-xs"
               disabled={loading || !email}
               isLoading={loading}
             >
@@ -113,17 +113,15 @@ export default function AccountSettings() {
       </Card>
 
       <Card className="p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-purple-500/10 rounded-lg text-purple-500">
-            <Key size={24} />
-          </div>
+        <div className="flex items-center gap-4 mb-6">
+          <Key className="text-purple-500 w-7 h-7" />
           <div>
-            <h2 className="text-xl font-semibold text-white">Change Password</h2>
-            <p className="text-sm text-gray-400">Ensure your account is secure</p>
+            <h2 className="text-lg font-bold text-white">Security</h2>
+            <p className="text-xs text-stone-500">Manage your password protection</p>
           </div>
         </div>
 
-        <form onSubmit={handleUpdatePassword} className="space-y-4">
+        <form onSubmit={handleUpdatePassword} className="space-y-4 pt-4 border-t border-stone-800/50">
           <Input
             label="New Password"
             type="password"
@@ -143,6 +141,8 @@ export default function AccountSettings() {
           <div className="flex justify-end">
             <Button 
               type="submit" 
+              fullWidth
+              className="md:w-auto h-9 text-xs"
               disabled={loading || !password}
               isLoading={loading}
             >
@@ -152,25 +152,25 @@ export default function AccountSettings() {
         </form>
       </Card>
 
-      <Card className="p-6 border-red-900/50 bg-red-950/10">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-red-500/10 rounded-lg text-red-500">
-            <Shield size={24} />
-          </div>
+      <Card className="p-6">
+        <div className="flex items-center gap-4 mb-6">
+          <AlertTriangle className="text-red-500 w-7 h-7" />
           <div>
-            <h2 className="text-xl font-semibold text-white">Danger Zone</h2>
-            <p className="text-sm text-red-400/80">Irreversible account actions</p>
+            <h2 className="text-lg font-bold text-white">Danger Zone</h2>
+            <p className="text-xs text-stone-500">Irreversible account actions</p>
           </div>
         </div>
 
-        <div className="flex items-center justify-between p-4 bg-red-500/5 rounded-lg border border-red-500/10">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-4 border-t border-stone-800/50">
           <div>
-            <h3 className="text-white font-medium">Delete Account</h3>
-            <p className="text-sm text-gray-400">Permanently remove your account and all data</p>
+            <h3 className="text-sm font-semibold text-white">Delete Account</h3>
+            <p className="text-xs text-stone-500 mt-0.5">Permanently remove your account and all associated data</p>
           </div>
           <Button 
             variant="danger" 
             onClick={() => setIsDeleteModalOpen(true)}
+            fullWidth
+            className="md:w-auto px-6 h-9 text-xs"
           >
             Delete Account
           </Button>
@@ -191,7 +191,7 @@ export default function AccountSettings() {
             </p>
           </div>
           
-          <p className="text-gray-300">
+          <p className="text-stone-300">
             To confirm deletion, please type <strong>DELETE</strong> below.
           </p>
 
@@ -202,12 +202,14 @@ export default function AccountSettings() {
             onChange={(e) => setDeleteConfirmation(e.target.value)}
           />
 
-          <div className="flex justify-end gap-3 mt-6">
-            <Button variant="ghost" onClick={() => setIsDeleteModalOpen(false)}>
+          <div className="flex flex-col md:flex-row justify-end gap-3 mt-6">
+            <Button variant="ghost" fullWidth className="md:w-auto" onClick={() => setIsDeleteModalOpen(false)}>
               Cancel
             </Button>
             <Button 
               variant="danger" 
+              fullWidth
+              className="md:w-auto"
               disabled={deleteConfirmation !== 'DELETE' || loading}
               onClick={async () => {
                 // In a real app, this would call a Supabase Function.

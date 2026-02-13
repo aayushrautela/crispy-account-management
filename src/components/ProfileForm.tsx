@@ -94,17 +94,17 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ initialData, onSuccess
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="flex flex-col items-center gap-4">
         <div 
-          className="relative group cursor-pointer w-24 h-24 rounded-full overflow-hidden bg-gray-800 border-2 border-gray-700 hover:border-blue-500 transition-colors"
+          className="relative group cursor-pointer w-24 h-24 rounded-full overflow-hidden bg-stone-800 border-2 border-stone-700 hover:border-blue-500 transition-colors"
           onClick={() => fileInputRef.current?.click()}
         >
           {avatarPreview ? (
             <img src={avatarPreview} alt="Avatar preview" className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-gray-500">
+            <div className="w-full h-full flex items-center justify-center text-stone-500">
               <UserIcon size={32} />
             </div>
           )}
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="absolute inset-0 bg-stone-900/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
             <Camera className="w-6 h-6 text-white" />
           </div>
         </div>
@@ -115,7 +115,7 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ initialData, onSuccess
           accept="image/*" 
           className="hidden" 
         />
-        <p className="text-sm text-gray-400">Click to change avatar</p>
+        <p className="text-sm text-stone-400">Click to change avatar</p>
       </div>
 
       <div className="space-y-4">
@@ -134,11 +134,11 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ initialData, onSuccess
         </div>
       )}
 
-      <div className="flex justify-end gap-3 pt-4 border-t border-gray-800">
-        <Button type="button" variant="ghost" onClick={onCancel} disabled={loading}>
+      <div className="flex flex-col md:flex-row justify-end gap-3 pt-4 border-t border-stone-800">
+        <Button type="button" variant="ghost" className="w-full md:w-auto" onClick={onCancel} disabled={loading}>
           Cancel
         </Button>
-        <Button type="submit" isLoading={loading}>
+        <Button type="submit" className="w-full md:w-auto" isLoading={loading}>
           {initialData ? 'Save Changes' : 'Create Profile'}
         </Button>
       </div>

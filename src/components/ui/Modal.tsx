@@ -31,14 +31,14 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/70 backdrop-blur-sm animate-in fade-in duration-200">
       <div 
         className={cn(
-          "relative w-full max-w-md bg-gray-900 border border-gray-800 rounded-lg shadow-xl animate-in zoom-in-95 duration-200",
+          "relative w-full max-w-md bg-stone-900 border border-stone-800/50 rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200",
           className
         )}
       >
-        <div className="flex items-center justify-between p-4 border-b border-gray-800">
+        <div className="flex items-center justify-between p-4 border-b border-stone-800/50">
           <h2 className="text-lg font-semibold text-white">{title}</h2>
           <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close">
             <X className="w-5 h-5" />

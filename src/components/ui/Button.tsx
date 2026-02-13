@@ -6,6 +6,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'outline';
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
+  fullWidth?: boolean;
 }
 
 export function Button({ 
@@ -14,17 +15,18 @@ export function Button({
   variant = 'primary', 
   size = 'md', 
   isLoading, 
+  fullWidth,
   disabled, 
   ...props 
 }: ButtonProps) {
-  const baseStyles = "inline-flex items-center justify-center rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
+  const baseStyles = "inline-flex items-center justify-center font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
   
   const variants = {
-    primary: "bg-white text-black hover:bg-gray-200 focus:ring-white border-2 border-white",
-    secondary: "bg-gray-800 text-white hover:bg-gray-700 focus:ring-gray-700 border-2 border-gray-800",
-    danger: "bg-red-600 text-white hover:bg-red-700 focus:ring-red-600 border-2 border-red-600",
-    ghost: "bg-transparent text-gray-300 hover:text-white hover:bg-gray-800 border-2 border-transparent",
-    outline: "bg-transparent border-2 border-gray-800 text-gray-300 hover:border-gray-600 hover:text-white"
+    primary: "bg-white text-stone-900 hover:bg-stone-100 focus:ring-white rounded-full",
+    secondary: "bg-stone-800 text-white hover:bg-stone-700 focus:ring-stone-700 rounded-full",
+    danger: "bg-red-600 text-white hover:bg-red-700 focus:ring-red-600 rounded-full",
+    ghost: "bg-transparent text-stone-300 hover:text-white hover:bg-stone-800 rounded-full",
+    outline: "bg-transparent border border-stone-800 text-stone-400 hover:border-stone-700 hover:text-white rounded-full"
   };
 
   const sizes = {
@@ -35,7 +37,13 @@ export function Button({
 
   return (
     <button
-      className={cn(baseStyles, variants[variant], sizes[size], className)}
+      className={cn(
+        baseStyles, 
+        variants[variant], 
+        sizes[size], 
+        fullWidth && "w-full",
+        className
+      )}
       disabled={disabled || isLoading}
       {...props}
     >

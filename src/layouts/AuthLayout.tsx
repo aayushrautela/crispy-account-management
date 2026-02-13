@@ -7,7 +7,7 @@ export default function AuthLayout() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black text-white">
+      <div className="flex min-h-screen items-center justify-center bg-stone-900 text-white">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-white"></div>
       </div>
     );
@@ -18,13 +18,15 @@ export default function AuthLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-black text-white flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-stone-900 text-white flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md space-y-8">
-        <div className="flex justify-center">
-          <img src={logo} alt="Crispy" className="h-12 w-auto" />
+        <div className="flex flex-col items-center gap-4">
+          <img src={logo} alt="Crispy" className="w-16 h-16" />
+          <h1 className="text-4xl font-black tracking-tight text-white">Crispy</h1>
         </div>
         <Outlet />
       </div>
     </div>
   );
 }
+

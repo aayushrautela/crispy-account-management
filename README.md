@@ -12,7 +12,7 @@ A standalone, production-grade React application for managing Crispy accounts. T
 - **Account Security**:
   - Update Email and Password.
   - "Danger Zone" for account deletion.
-- **Downloads**: Access client downloads for Windows, Linux, and Android.
+- **Get the app**: Access client downloads for Windows, Linux, and Android.
 - **Modern UI**: Clean, minimalist dark-mode interface built with Tailwind CSS and Lucide icons.
 
 ## Tech Stack
@@ -72,7 +72,7 @@ npm run preview
 - `src/layouts`: Auth and Dashboard layouts.
 - `src/pages`:
   - `auth/`: Login, Signup pages.
-  - `dashboard/`: Profile List, Account Settings, Downloads.
+  - `dashboard/`: Profile List, Account Settings, Get the app
 - `src/components`: Reusable UI components (Button, Input, Modal, ProfileForm).
 - `src/store`: Zustand stores (useAuthStore).
 - `src/lib`: Supabase client and utility functions.

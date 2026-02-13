@@ -1,26 +1,28 @@
-import { Monitor, Smartphone, Terminal } from 'lucide-react';
-import { Card } from '../../components/ui/Card';
+import { Monitor, Terminal, Smartphone } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 
 export default function Downloads() {
   const downloads = [
     {
       os: 'Windows',
-      icon: <Monitor size={48} className="text-blue-500" />,
+      icon: Monitor,
+      color: 'text-blue-500',
       version: 'v2.4.0',
       description: '64-bit Installer for Windows 10/11',
       link: '#'
     },
     {
       os: 'Android',
-      icon: <Smartphone size={48} className="text-green-500" />,
+      icon: Smartphone,
+      color: 'text-green-500',
       version: 'v2.4.0',
       description: 'APK for Android 8.0+',
       link: '#'
     },
     {
       os: 'Linux',
-      icon: <Terminal size={48} className="text-orange-500" />,
+      icon: Terminal,
+      color: 'text-orange-500',
       version: 'v2.4.0',
       description: 'AppImage for generic Linux distros',
       link: '#'
@@ -28,35 +30,38 @@ export default function Downloads() {
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-white">Downloads</h1>
-        <p className="text-gray-400 mt-1">Get the latest Crispy clients for your devices.</p>
+        <h1 className="text-2xl font-bold text-white tracking-tight">Get the app</h1>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="space-y-3">
         {downloads.map((item) => (
-          <Card key={item.os} className="p-6 flex flex-col items-center text-center hover:border-gray-700 transition-colors">
-            <div className="mb-4 p-4 bg-gray-900 rounded-full border border-gray-800">
-              {item.icon}
+          <div key={item.os} className="flex flex-col md:flex-row items-center justify-between p-5 bg-stone-800 border border-stone-600 rounded-2xl hover:border-stone-500 transition-all group gap-4 shadow-xl shadow-black/10">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-stone-800/50 rounded-xl border border-stone-700/50">
+                <item.icon className="w-6 h-6 text-amber-500" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-white">{item.os}</h3>
+                  <span className="px-1.5 py-0.5 rounded bg-stone-800 text-[10px] text-stone-400 font-mono border border-stone-700 shrink-0">
+                    {item.version}
+                  </span>
+                </div>
+                <p className="text-sm text-stone-400">{item.description}</p>
+              </div>
             </div>
-            <h3 className="text-xl font-bold text-white mb-1">{item.os}</h3>
-            <span className="inline-block px-2 py-0.5 rounded-full bg-gray-800 text-gray-300 text-xs font-mono mb-3">
-              {item.version}
-            </span>
-            <p className="text-sm text-gray-400 mb-6">
-              {item.description}
-            </p>
-            <Button className="w-full" onClick={() => window.open(item.link, '_blank')}>
-              Download
+            <Button variant="secondary" className="w-full md:w-auto px-6">
+              Get the app
             </Button>
-          </Card>
+          </div>
         ))}
       </div>
-      
-      <div className="mt-12 p-6 rounded-xl bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-white/5">
-         <h3 className="text-lg font-semibold text-white mb-2">Looking for other platforms?</h3>
-         <p className="text-gray-400 text-sm">
+
+      <div className="mt-8 p-5 rounded-xl bg-stone-800/50 border border-stone-700">
+         <h3 className="text-sm font-semibold text-white mb-1">Looking for other platforms?</h3>
+         <p className="text-sm text-gray-500">
            iOS and MacOS versions are currently in beta testing. Join our Discord to get early access.
          </p>
       </div>

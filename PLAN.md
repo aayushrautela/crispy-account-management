@@ -27,7 +27,7 @@ A standalone, responsive web application for managing "Crispy" user accounts. Th
 - **Account Settings:**
     - **Security:** Update Email, Change Password.
     - **Danger Zone:** Delete Account (Cascading delete of all data).
-- **Downloads Section:**
+- **Get the app Section:**
     - Clean cards/buttons for downloading clients:
         - Windows
         - Linux
@@ -58,4 +58,4 @@ A standalone, responsive web application for managing "Crispy" user accounts. Th
 - [x] Dashboard Layout (Sidebar/Mobile Nav)
 - [x] Profile Management (List, Add, Edit, Delete)
 - [x] Account Settings (Email, Password, Delete Account)
-- [x] Downloads Page
+- [x] Get the app Page

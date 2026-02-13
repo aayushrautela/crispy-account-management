@@ -4,7 +4,6 @@ import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../store/useAuthStore';
 import type { Profile } from '../../types';
 import { Button } from '../../components/ui/Button';
-import { Card } from '../../components/ui/Card';
 import { Modal } from '../../components/ui/Modal';
 import { ProfileForm } from '../../components/ProfileForm';
 
@@ -80,68 +79,81 @@ export default function ProfileList() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-black tracking-tight text-white uppercase">Profiles</h1>
-          <p className="text-gray-500 mt-1 font-medium">Manage your viewing identities and preferences.</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">Profiles</h1>
+          <p className="text-sm text-stone-500 mt-0.5">Manage your viewing identities and preferences.</p>
         </div>
-        <Button onClick={handleOpenCreate} disabled={profiles.length >= 5}>
-          <Plus size={20} className="mr-2" />
+        <Button onClick={handleOpenCreate} size="sm" className="w-full md:w-auto h-9 px-4 font-semibold">
+          <Plus size={18} className="mr-1.5" />
           Add Profile
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {profiles.map((profile) => (
-          <Card key={profile.id} className="p-0 group relative overflow-hidden transition-all hover:border-gray-600 border-2">
-             <div className="p-6">
-               <div className="flex items-start justify-between mb-4">
-                  <div className="w-20 h-20 rounded-lg bg-gray-800 border-2 border-gray-700 flex items-center justify-center overflow-hidden shrink-0 shadow-lg">
-                    {profile.avatar ? (
-                      <img src={profile.avatar} alt={profile.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <User size={40} className="text-gray-600" />
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <span className="inline-block px-2 py-1 rounded bg-gray-800 text-[10px] font-bold text-gray-400 uppercase tracking-widest border border-gray-700">
-                      Standard
+      <div className="space-y-3">
+        {profiles.map((profile, index) => (
+          <div 
+            key={profile.id} 
+            className="flex items-center justify-between p-4 bg-stone-800 border border-stone-600 rounded-2xl hover:border-stone-500 hover:bg-stone-700 transition-all group shadow-xl shadow-black/10"
+          >
+            <div className="flex items-center gap-4 min-w-0">
+              <div className="w-14 h-14 rounded-xl bg-stone-800/50 border border-stone-700/50 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+                {profile.avatar ? (
+                  <img src={profile.avatar} alt={profile.name} className="w-full h-full object-cover" />
+                ) : (
+                  <User size={28} className="text-stone-500" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-semibold text-white truncate">{profile.name}</h3>
+                  {index === 0 && (
+                    <span className="px-1.5 py-0.5 rounded bg-blue-500/10 text-[10px] font-bold text-blue-400 uppercase tracking-wide border border-blue-500/20">
+                      Primary
                     </span>
-                  </div>
-               </div>
-               <div>
-                  <h3 className="text-2xl font-black text-white leading-tight uppercase truncate">{profile.name}</h3>
-                  <div className="flex items-center gap-2 mt-2">
-                    <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                    <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Active Profile</p>
-                  </div>
-               </div>
-             </div>
-             <div className="border-t border-gray-800 p-4 bg-black/40 flex items-center justify-between text-xs text-gray-500 font-bold uppercase tracking-widest">
-                <span>Created {new Date(profile.created_at || Date.now()).toLocaleDateString()}</span>
-                <span>ID: {profile.id.slice(0, 8)}</span>
-             </div>
-             
-             <div className="p-4 bg-gray-900 border-t border-gray-800 flex gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
-               <Button variant="secondary" size="sm" className="flex-1 font-bold uppercase text-xs tracking-widest" onClick={() => handleOpenEdit(profile)}>
-                 <Edit2 size={14} className="mr-2" />
-                 Settings
-               </Button>
-               <Button variant="danger" size="sm" className="px-3" onClick={() => setProfileToDelete(profile)}>
-                 <Trash2 size={14} />
-               </Button>
-             </div>
-          </Card>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 mt-0.5">
+                  <span className="text-xs text-stone-500 flex items-center gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-green-500" />
+                    Active
+                  </span>
+                  <span className="text-[10px] text-stone-600 font-mono">
+                    ID: {profile.id.slice(0, 8).toUpperCase()}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button 
+                onClick={() => handleOpenEdit(profile)}
+                className="p-2 text-stone-400 hover:text-white hover:bg-stone-800 rounded-lg transition-colors"
+                title="Profile Settings"
+              >
+                <Edit2 size={18} />
+              </button>
+              {index !== 0 && (
+                <button 
+                  onClick={() => setProfileToDelete(profile)}
+                  className="p-2 text-red-400/80 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                  title="Delete Profile"
+                >
+                  <Trash2 size={18} />
+                </button>
+              )}
+            </div>
+          </div>
         ))}
 
         {profiles.length === 0 && (
-          <div className="col-span-full py-24 text-center text-gray-500 bg-gray-900 rounded-2xl border-2 border-dashed border-gray-800 flex flex-col items-center">
-            <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mb-6">
-              <User size={40} className="text-gray-600" />
+          <div className="py-16 text-center bg-stone-800/30 border border-dashed border-stone-700/50 rounded-2xl flex flex-col items-center">
+            <div className="w-12 h-12 bg-stone-800/50 rounded-xl flex items-center justify-center mb-4">
+              <User size={24} className="text-stone-600" />
             </div>
-            <h2 className="text-2xl font-black text-white uppercase mb-2">No Profiles Found</h2>
-            <p className="max-w-xs text-gray-500 font-medium">Start your journey by creating your first viewing profile. You can have up to 5.</p>
-            <Button onClick={handleOpenCreate} variant="outline" className="mt-8 border-2">
-              <Plus size={20} className="mr-2" />
-              Get Started
+            <h2 className="text-lg font-bold text-white mb-1">No profiles yet</h2>
+            <p className="text-sm text-stone-500 max-w-[240px] mx-auto">Create a profile to start tracking your viewing history.</p>
+            <Button onClick={handleOpenCreate} variant="outline" size="sm" className="w-full md:w-auto mt-6">
+              <Plus size={16} className="mr-1.5" />
+              Create First Profile
             </Button>
           </div>
         )}
@@ -171,14 +183,14 @@ export default function ProfileList() {
         className="max-w-sm"
       >
         <div className="space-y-4">
-          <p className="text-gray-300">
+          <p className="text-stone-300">
             Are you sure you want to delete <strong>{profileToDelete?.name}</strong>? This action cannot be undone.
           </p>
-          <div className="flex justify-end gap-3">
-            <Button variant="ghost" onClick={() => setProfileToDelete(null)}>
+          <div className="flex flex-col md:flex-row justify-end gap-3">
+            <Button variant="ghost" className="w-full md:w-auto" onClick={() => setProfileToDelete(null)}>
               Cancel
             </Button>
-            <Button variant="danger" onClick={handleDelete}>
+            <Button variant="danger" className="w-full md:w-auto" onClick={handleDelete}>
               Delete Profile
             </Button>
           </div>
