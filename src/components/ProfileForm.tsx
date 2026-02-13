@@ -4,7 +4,7 @@ import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { AvatarPicker } from './AvatarPicker';
 import type { Profile } from '../types';
-import type { AvatarSource } from '../lib/avatar';
+import { getRandomDiceBearUrl, resolveAvatarUrl } from '../lib/avatar';
 import { useAuthStore } from '../store/useAuthStore';
 
 interface ProfileFormProps {
@@ -13,37 +13,11 @@ interface ProfileFormProps {
   onCancel: () => void;
 }
 
-function parseInitialAvatarSource(avatar: string | null): AvatarSource | undefined {
-  if (!avatar) return undefined;
-  
-  if (avatar.startsWith('dicebear:')) {
-    const [, style, seed] = avatar.split(':');
-    return {
-      type: 'dicebear',
-      style: style as AvatarSource['style'],
-      seed,
-      url: null,
-    };
-  }
-  
-  return {
-    type: 'upload',
-    url: avatar,
-  };
-}
-
-function serializeAvatarSource(source: AvatarSource): string | null {
-  if (source.type === 'dicebear' && source.style && source.seed) {
-    return `dicebear:${source.style}:${source.seed}`;
-  }
-  return source.url;
-}
-
 export const ProfileForm: React.FC<ProfileFormProps> = ({ initialData, onSuccess, onCancel }) => {
   const { user } = useAuthStore();
   const [name, setName] = useState(initialData?.name || '');
-  const [avatarSource, setAvatarSource] = useState<AvatarSource | undefined>(
-    parseInitialAvatarSource(initialData?.avatar || null)
+  const [avatarUrl, setAvatarUrl] = useState<string>(
+    initialData?.avatar ? (resolveAvatarUrl(initialData.avatar) || getRandomDiceBearUrl()) : getRandomDiceBearUrl()
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,8 +30,6 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ initialData, onSuccess
     setError(null);
 
     try {
-      const avatarUrl = avatarSource ? serializeAvatarSource(avatarSource) : null;
-
       if (initialData) {
         const { error: updateError } = await supabase
           .from('profiles')
@@ -100,8 +72,8 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ initialData, onSuccess
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="flex flex-col items-center gap-4">
         <AvatarPicker
-          initialSource={avatarSource}
-          onChange={setAvatarSource}
+          value={avatarUrl}
+          onChange={setAvatarUrl}
         />
       </div>
 
