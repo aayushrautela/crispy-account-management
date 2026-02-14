@@ -8,6 +8,7 @@ import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
 import ProfileList from './pages/dashboard/ProfileList';
 import AccountSettings from './pages/dashboard/AccountSettings';
+import Addons from './pages/dashboard/Addons';
 import Downloads from './pages/dashboard/Downloads';
 
 function App() {
@@ -30,6 +31,7 @@ function App() {
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route index element={<ProfileList />} />
             <Route path="account" element={<AccountSettings />} />
+            <Route path="addons" element={<Addons />} />
             <Route path="downloads" element={<Downloads />} />
           </Route>
 

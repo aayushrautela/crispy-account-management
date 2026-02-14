@@ -1,6 +1,6 @@
 import { useState, type ComponentType } from 'react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
-import { LogOut, Menu, Settings, Smartphone, User } from 'lucide-react';
+import { LogOut, Menu, Puzzle, Settings, Smartphone, User } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
@@ -15,6 +15,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { name: 'Profiles', href: '/dashboard', icon: User },
   { name: 'Account', href: '/dashboard/account', icon: Settings },
+  { name: 'Addons', href: '/dashboard/addons', icon: Puzzle },
   { name: 'Get the app', href: '/dashboard/downloads', icon: Smartphone },
 ];
 

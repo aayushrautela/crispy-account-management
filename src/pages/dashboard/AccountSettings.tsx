@@ -125,7 +125,7 @@ export default function AccountSettings() {
 
       <Card className="p-6">
         <div className="mb-6 flex items-center gap-4">
-          <Mail className="h-7 w-7 text-blue-500" />
+          <Mail className="h-7 w-7 text-amber-500" />
           <div>
             <h2 className="text-lg font-bold text-white">Email</h2>
             <p className="text-xs text-stone-500">Update your login email address</p>
@@ -147,7 +147,7 @@ export default function AccountSettings() {
             <div
               className={`rounded-lg border p-3 text-sm ${
                 emailMessage.type === 'success'
-                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                  ? 'border-amber-500/20 bg-amber-500/10 text-amber-300'
                   : 'border-red-500/20 bg-red-500/10 text-red-400'
               }`}
             >
@@ -203,7 +203,7 @@ export default function AccountSettings() {
             <div
               className={`rounded-lg border p-3 text-sm ${
                 passwordMessage.type === 'success'
-                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                  ? 'border-amber-500/20 bg-amber-500/10 text-amber-300'
                   : 'border-red-500/20 bg-red-500/10 text-red-400'
               }`}
             >

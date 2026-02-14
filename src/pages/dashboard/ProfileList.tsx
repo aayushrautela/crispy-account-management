@@ -191,7 +191,7 @@ export default function ProfileList() {
                   <div className="flex items-center gap-2">
                     <h3 className="truncate text-base font-semibold text-white">{profile.name}</h3>
                     {isPrimary && (
-                      <span className="rounded border border-blue-500/20 bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-400">
+                      <span className="rounded border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">
                         Primary
                       </span>
                     )}

@@ -19,10 +19,10 @@ export function Button({
   disabled, 
   ...props 
 }: ButtonProps) {
-  const baseStyles = "inline-flex items-center justify-center font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
+  const baseStyles = "inline-flex items-center justify-center font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-stone-900 disabled:opacity-50 disabled:pointer-events-none";
   
   const variants = {
-    primary: "bg-white text-stone-900 hover:bg-stone-100 focus:ring-white rounded-full",
+    primary: "bg-amber-500 text-stone-900 hover:bg-amber-400 focus:ring-amber-500 rounded-full",
     secondary: "bg-stone-800 text-white hover:bg-stone-700 focus:ring-stone-700 rounded-full",
     danger: "bg-red-600 text-white hover:bg-red-700 focus:ring-red-600 rounded-full",
     ghost: "bg-transparent text-stone-300 hover:text-white hover:bg-stone-800 rounded-full",

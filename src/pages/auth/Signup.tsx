@@ -92,7 +92,7 @@ export default function Signup() {
           )}
 
           {notice && (
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm text-emerald-400">
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-300">
               {notice}
             </div>
           )}
