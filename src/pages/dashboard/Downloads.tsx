@@ -1,70 +1,94 @@
-import { Monitor, Terminal, Smartphone } from 'lucide-react';
-import { Button } from '../../components/ui/Button';
+import type { ComponentType } from 'react';
+import { Monitor, Smartphone, Terminal } from 'lucide-react';
+import { Card } from '../../components/ui/Card';
+
+interface DownloadItem {
+  os: string;
+  icon: ComponentType<{ className?: string }>;
+  description: string;
+  envKey: string;
+}
+
+const downloadItems: DownloadItem[] = [
+  {
+    os: 'Windows',
+    icon: Monitor,
+    description: '64-bit installer for Windows 10/11.',
+    envKey: 'VITE_DOWNLOAD_URL_WINDOWS',
+  },
+  {
+    os: 'Android',
+    icon: Smartphone,
+    description: 'APK package for Android 8.0+.',
+    envKey: 'VITE_DOWNLOAD_URL_ANDROID',
+  },
+  {
+    os: 'Linux',
+    icon: Terminal,
+    description: 'AppImage package for Linux distributions.',
+    envKey: 'VITE_DOWNLOAD_URL_LINUX',
+  },
+];
+
+function downloadUrlFor(envKey: string): string | null {
+  const value = import.meta.env[envKey] as string | undefined;
+  return value?.trim() ? value.trim() : null;
+}
 
 export default function Downloads() {
-  const downloads = [
-    {
-      os: 'Windows',
-      icon: Monitor,
-      color: 'text-blue-500',
-      version: 'v2.4.0',
-      description: '64-bit Installer for Windows 10/11',
-      link: '#'
-    },
-    {
-      os: 'Android',
-      icon: Smartphone,
-      color: 'text-green-500',
-      version: 'v2.4.0',
-      description: 'APK for Android 8.0+',
-      link: '#'
-    },
-    {
-      os: 'Linux',
-      icon: Terminal,
-      color: 'text-orange-500',
-      version: 'v2.4.0',
-      description: 'AppImage for generic Linux distros',
-      link: '#'
-    }
-  ];
-
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white tracking-tight">Get the app</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-white">Get the app</h1>
+        <p className="mt-0.5 text-sm text-stone-500">
+          Download the native app for your device.
+        </p>
       </div>
 
       <div className="space-y-3">
-        {downloads.map((item) => (
-          <div key={item.os} className="flex flex-col md:flex-row items-center justify-between p-5 bg-stone-800 border border-stone-600 rounded-2xl hover:border-stone-500 transition-all group gap-4 shadow-xl shadow-black/10">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-stone-800/50 rounded-xl border border-stone-700/50">
-                <item.icon className="w-6 h-6 text-amber-500" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-white">{item.os}</h3>
-                  <span className="px-1.5 py-0.5 rounded bg-stone-800 text-[10px] text-stone-400 font-mono border border-stone-700 shrink-0">
-                    {item.version}
-                  </span>
+        {downloadItems.map((item) => {
+          const url = downloadUrlFor(item.envKey);
+
+          return (
+            <Card
+              key={item.os}
+              className="flex flex-col items-start justify-between gap-4 border-stone-600 p-5 md:flex-row md:items-center"
+            >
+              <div className="flex items-center gap-4">
+                <div className="rounded-xl border border-stone-700/50 bg-stone-800/50 p-3">
+                  <item.icon className="h-6 w-6 text-amber-500" />
                 </div>
-                <p className="text-sm text-stone-400">{item.description}</p>
+                <div>
+                  <h3 className="font-semibold text-white">{item.os}</h3>
+                  <p className="text-sm text-stone-400">{item.description}</p>
+                </div>
               </div>
-            </div>
-            <Button variant="secondary" className="w-full md:w-auto px-6">
-              Get the app
-            </Button>
-          </div>
-        ))}
+
+              {url ? (
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex h-10 w-full items-center justify-center rounded-xl bg-amber-500 px-6 text-sm font-semibold text-stone-900 transition-colors hover:bg-amber-400 md:w-auto"
+                >
+                  Download
+                </a>
+              ) : (
+                <span className="inline-flex h-10 w-full items-center justify-center rounded-xl border border-stone-600 bg-stone-700 px-6 text-sm font-semibold text-stone-300 md:w-auto">
+                  Coming soon
+                </span>
+              )}
+            </Card>
+          );
+        })}
       </div>
 
-      <div className="mt-8 p-5 rounded-xl bg-stone-800/50 border border-stone-700">
-         <h3 className="text-sm font-semibold text-white mb-1">Looking for other platforms?</h3>
-         <p className="text-sm text-gray-500">
-           iOS and MacOS versions are currently in beta testing. Join our Discord to get early access.
-         </p>
-      </div>
+      <Card className="border-stone-700 p-5">
+        <h3 className="text-sm font-semibold text-white">Need another platform?</h3>
+        <p className="mt-1 text-sm text-stone-400">
+          iOS and macOS builds are in private beta. Contact the Crispy team for early access.
+        </p>
+      </Card>
     </div>
   );
 }

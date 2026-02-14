@@ -1,68 +1,46 @@
-import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { useMemo, useState } from 'react';
+import { z } from 'zod';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
 import { AvatarPicker } from './AvatarPicker';
 import type { Profile } from '../types';
 import { getRandomDiceBearUrl, resolveAvatarUrl } from '../lib/avatar';
-import { useAuthStore } from '../store/useAuthStore';
+import { mapSupabaseError } from '../lib/errors';
+import { profileNameSchema } from '../contracts';
 
 interface ProfileFormProps {
   initialData?: Profile;
-  onSuccess: () => void;
+  onSubmit: (payload: { name: string; avatar: string | null }) => Promise<void>;
   onCancel: () => void;
 }
 
-export const ProfileForm: React.FC<ProfileFormProps> = ({ initialData, onSuccess, onCancel }) => {
-  const { user } = useAuthStore();
-  const [name, setName] = useState(initialData?.name || '');
-  const [avatarUrl, setAvatarUrl] = useState<string>(
-    initialData?.avatar ? (resolveAvatarUrl(initialData.avatar) || getRandomDiceBearUrl()) : getRandomDiceBearUrl()
-  );
+export function ProfileForm({ initialData, onSubmit, onCancel }: ProfileFormProps) {
+  const initialAvatar = useMemo(() => {
+    const resolved = resolveAvatarUrl(initialData?.avatar ?? null);
+    return resolved ?? getRandomDiceBearUrl();
+  }, [initialData?.avatar]);
+
+  const [name, setName] = useState(initialData?.name ?? '');
+  const [avatarUrl, setAvatarUrl] = useState(initialAvatar);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setLoading(true);
     setError(null);
 
     try {
-      if (initialData) {
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({ name, avatar: avatarUrl, updated_at: new Date().toISOString() })
-          .eq('id', initialData.id);
+      const parsedName = profileNameSchema.parse(name);
+      const avatar = avatarUrl.trim() ? avatarUrl.trim() : null;
 
-        if (updateError) throw updateError;
+      await onSubmit({ name: parsedName, avatar });
+    } catch (submissionError) {
+      if (submissionError instanceof z.ZodError) {
+        setError(submissionError.issues[0]?.message ?? 'Invalid profile form values.');
       } else {
-        const { data: existingProfiles } = await supabase
-          .from('profiles')
-          .select('order_index')
-          .eq('account_id', user.id)
-          .order('order_index', { ascending: false })
-          .limit(1);
-
-        const nextOrderIndex = (existingProfiles?.[0]?.order_index ?? -1) + 1;
-
-        const { error: createError } = await supabase
-          .from('profiles')
-          .insert({
-            account_id: user.id,
-            name,
-            avatar: avatarUrl,
-            order_index: nextOrderIndex,
-          });
-
-        if (createError) throw createError;
+        setError(mapSupabaseError(submissionError, 'Failed to save profile.'));
       }
-
-      onSuccess();
-    } catch (err) {
-      console.error('Error saving profile:', err);
-      setError(err instanceof Error ? err.message : 'Failed to save profile');
     } finally {
       setLoading(false);
     }
@@ -71,29 +49,25 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ initialData, onSuccess
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="flex flex-col items-center gap-4">
-        <AvatarPicker
-          value={avatarUrl}
-          onChange={setAvatarUrl}
-        />
+        <AvatarPicker value={avatarUrl} onChange={setAvatarUrl} />
       </div>
 
-      <div className="space-y-4">
-        <Input
-          label="Profile Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Enter profile name"
-          required
-        />
-      </div>
+      <Input
+        label="Profile Name"
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        placeholder="Enter profile name"
+        maxLength={32}
+        required
+      />
 
       {error && (
-        <div className="p-3 text-sm text-red-500 bg-red-500/10 border border-red-500/20 rounded-md">
+        <div className="rounded-md border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-500">
           {error}
         </div>
       )}
 
-      <div className="flex flex-col md:flex-row justify-end gap-3 pt-4 border-t border-stone-800">
+      <div className="flex flex-col gap-3 border-t border-stone-800 pt-4 md:flex-row md:justify-end">
         <Button
           type="button"
           variant="ghost"
@@ -109,4 +83,4 @@ export const ProfileForm: React.FC<ProfileFormProps> = ({ initialData, onSuccess
       </div>
     </form>
   );
-};
+}

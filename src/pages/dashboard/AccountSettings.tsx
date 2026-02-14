@@ -1,110 +1,166 @@
-import React, { useState } from 'react';
-import { supabase } from '../../lib/supabase';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, Key, Mail } from 'lucide-react';
+import { z } from 'zod';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
 import { Modal } from '../../components/ui/Modal';
-import { Key, Mail, AlertTriangle, CheckCircle } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
-import { useNavigate } from 'react-router-dom';
+import {
+  deleteCurrentAccount,
+  updateUserEmail,
+  updateUserPassword,
+} from '../../services/accountService';
+import { confirmationKeywordSchema } from '../../contracts';
+import { mapSupabaseError } from '../../lib/errors';
+
+interface SectionMessage {
+  type: 'success' | 'error';
+  text: string;
+}
 
 export default function AccountSettings() {
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  
+  const navigate = useNavigate();
+  const { signOut } = useAuthStore();
+
   const [email, setEmail] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailMessage, setEmailMessage] = useState<SectionMessage | null>(null);
+
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState<SectionMessage | null>(null);
+
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  const { signOut } = useAuthStore();
-  const navigate = useNavigate();
+  const deleteConfirmValid = useMemo(
+    () => confirmationKeywordSchema.safeParse(deleteConfirmation).success,
+    [deleteConfirmation],
+  );
 
-  const handleUpdateEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) return;
-    
-    setLoading(true);
-    setMessage(null);
+  const handleUpdateEmail = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setEmailLoading(true);
+    setEmailMessage(null);
 
     try {
-      const { error } = await supabase.auth.updateUser({ email });
-      if (error) throw error;
-      setMessage({ type: 'success', text: 'Confirmation email sent to the new address.' });
+      await updateUserEmail(email);
+      setEmailMessage({
+        type: 'success',
+        text: 'Confirmation email sent to your new address.',
+      });
       setEmail('');
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.message });
+    } catch (error) {
+      const message =
+        error instanceof z.ZodError
+          ? error.issues[0]?.message ?? 'Invalid email address.'
+          : mapSupabaseError(error, 'Failed to update email.');
+
+      setEmailMessage({ type: 'error', text: message });
     } finally {
-      setLoading(false);
+      setEmailLoading(false);
     }
   };
 
-  const handleUpdatePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!password || password !== confirmPassword) {
-      setMessage({ type: 'error', text: "Passwords don't match" });
+  const handleUpdatePassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setPasswordMessage(null);
+
+    if (password !== confirmPassword) {
+      setPasswordMessage({ type: 'error', text: "Passwords don't match." });
       return;
     }
 
-    setLoading(true);
-    setMessage(null);
+    setPasswordLoading(true);
 
     try {
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) throw error;
-      setMessage({ type: 'success', text: 'Password updated successfully.' });
+      await updateUserPassword(password);
+      setPasswordMessage({ type: 'success', text: 'Password updated successfully.' });
       setPassword('');
       setConfirmPassword('');
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.message });
+    } catch (error) {
+      const message =
+        error instanceof z.ZodError
+          ? error.issues[0]?.message ?? 'Invalid password.'
+          : mapSupabaseError(error, 'Failed to update password.');
+
+      setPasswordMessage({ type: 'error', text: message });
     } finally {
-      setLoading(false);
+      setPasswordLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteError(null);
+
+    if (!deleteConfirmValid) {
+      setDeleteError('Type DELETE to confirm account deletion.');
+      return;
+    }
+
+    setDeleteLoading(true);
+
+    try {
+      await deleteCurrentAccount();
+      await signOut();
+      navigate('/auth/login', { replace: true });
+    } catch (error) {
+      setDeleteError(mapSupabaseError(error, 'Failed to delete account.'));
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
+    <div className="mx-auto max-w-2xl space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-white tracking-tight">Account Settings</h1>
-        <p className="text-sm text-stone-500 mt-0.5">Manage your login and security preferences.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-white">Account Settings</h1>
+        <p className="mt-0.5 text-sm text-stone-500">Manage authentication and security for your account.</p>
       </div>
 
-      {message && (
-        <div className={`p-4 rounded-lg flex items-center gap-2 ${
-          message.type === 'success' 
-            ? 'bg-green-500/10 border border-green-500/20 text-green-500' 
-            : 'bg-red-500/10 border border-red-500/20 text-red-500'
-        }`}>
-          {message.type === 'success' ? <CheckCircle size={20} /> : <AlertTriangle size={20} />}
-          {message.text}
-        </div>
-      )}
-
       <Card className="p-6">
-        <div className="flex items-center gap-4 mb-6">
-          <Mail className="text-blue-500 w-7 h-7" />
+        <div className="mb-6 flex items-center gap-4">
+          <Mail className="h-7 w-7 text-blue-500" />
           <div>
             <h2 className="text-lg font-bold text-white">Email</h2>
-            <p className="text-xs text-stone-500">Update your account login email</p>
+            <p className="text-xs text-stone-500">Update your login email address</p>
           </div>
         </div>
 
-        <form onSubmit={handleUpdateEmail} className="space-y-4 pt-4 border-t border-stone-800/50">
+        <form onSubmit={handleUpdateEmail} className="space-y-4 border-t border-stone-800/50 pt-4">
           <Input
+            id="new-email"
             label="New Email Address"
             type="email"
+            placeholder="you@example.com"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Enter new email"
+            onChange={(event) => setEmail(event.target.value)}
+            required
           />
+
+          {emailMessage && (
+            <div
+              className={`rounded-lg border p-3 text-sm ${
+                emailMessage.type === 'success'
+                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                  : 'border-red-500/20 bg-red-500/10 text-red-400'
+              }`}
+            >
+              {emailMessage.text}
+            </div>
+          )}
+
           <div className="flex justify-end">
-            <Button 
-              type="submit" 
-              fullWidth
-              className="md:w-auto h-9 text-xs"
-              disabled={loading || !email}
-              isLoading={loading}
+            <Button
+              type="submit"
+              className="h-9 w-full text-xs md:w-auto"
+              isLoading={emailLoading}
+              disabled={!email.trim()}
             >
               Update Email
             </Button>
@@ -113,38 +169,54 @@ export default function AccountSettings() {
       </Card>
 
       <Card className="p-6">
-        <div className="flex items-center gap-4 mb-6">
-          <Key className="text-purple-500 w-7 h-7" />
+        <div className="mb-6 flex items-center gap-4">
+          <Key className="h-7 w-7 text-amber-500" />
           <div>
             <h2 className="text-lg font-bold text-white">Security</h2>
-            <p className="text-xs text-stone-500">Manage your password protection</p>
+            <p className="text-xs text-stone-500">Rotate your password</p>
           </div>
         </div>
 
-        <form onSubmit={handleUpdatePassword} className="space-y-4 pt-4 border-t border-stone-800/50">
+        <form onSubmit={handleUpdatePassword} className="space-y-4 border-t border-stone-800/50 pt-4">
           <Input
+            id="new-password"
             label="New Password"
             type="password"
+            placeholder="At least 8 characters"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Enter new password"
-            minLength={6}
+            onChange={(event) => setPassword(event.target.value)}
+            minLength={8}
+            required
           />
           <Input
+            id="confirm-password"
             label="Confirm Password"
             type="password"
+            placeholder="Repeat your password"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="Confirm new password"
-            minLength={6}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            minLength={8}
+            required
           />
+
+          {passwordMessage && (
+            <div
+              className={`rounded-lg border p-3 text-sm ${
+                passwordMessage.type === 'success'
+                  ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                  : 'border-red-500/20 bg-red-500/10 text-red-400'
+              }`}
+            >
+              {passwordMessage.text}
+            </div>
+          )}
+
           <div className="flex justify-end">
-            <Button 
-              type="submit" 
-              fullWidth
-              className="md:w-auto h-9 text-xs"
-              disabled={loading || !password}
-              isLoading={loading}
+            <Button
+              type="submit"
+              className="h-9 w-full text-xs md:w-auto"
+              isLoading={passwordLoading}
+              disabled={!password || !confirmPassword}
             >
               Update Password
             </Button>
@@ -153,24 +225,23 @@ export default function AccountSettings() {
       </Card>
 
       <Card className="p-6">
-        <div className="flex items-center gap-4 mb-6">
-          <AlertTriangle className="text-red-500 w-7 h-7" />
+        <div className="mb-6 flex items-center gap-4">
+          <AlertTriangle className="h-7 w-7 text-red-500" />
           <div>
             <h2 className="text-lg font-bold text-white">Danger Zone</h2>
-            <p className="text-xs text-stone-500">Irreversible account actions</p>
+            <p className="text-xs text-stone-500">Permanent account actions</p>
           </div>
         </div>
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-4 border-t border-stone-800/50">
-          <div>
-            <h3 className="text-sm font-semibold text-white">Delete Account</h3>
-            <p className="text-xs text-stone-500 mt-0.5">Permanently remove your account and all associated data</p>
-          </div>
-          <Button 
-            variant="danger" 
+        <div className="space-y-4 border-t border-stone-800/50 py-4">
+          <p className="text-sm text-stone-300">
+            Deleting your account permanently removes your household memberships, profiles, and related
+            data.
+          </p>
+          <Button
+            variant="danger"
+            className="h-9 w-full text-xs md:w-auto"
             onClick={() => setIsDeleteModalOpen(true)}
-            fullWidth
-            className="md:w-auto px-6 h-9 text-xs"
           >
             Delete Account
           </Button>
@@ -179,56 +250,63 @@ export default function AccountSettings() {
 
       <Modal
         isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
+        onClose={() => {
+          if (!deleteLoading) {
+            setIsDeleteModalOpen(false);
+            setDeleteConfirmation('');
+            setDeleteError(null);
+          }
+        }}
         title="Delete Account"
         className="max-w-md"
       >
         <div className="space-y-4">
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex gap-3 text-red-400">
-            <AlertTriangle className="shrink-0" />
+          <div className="flex gap-3 rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-red-400">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
             <p className="text-sm">
-              This action is permanent and cannot be undone. All your profiles, watch history, and account data will be permanently deleted.
+              This action cannot be undone. Ensure your `delete-account` Supabase edge function is deployed.
             </p>
           </div>
-          
-          <p className="text-stone-300">
-            To confirm deletion, please type <strong>DELETE</strong> below.
+
+          <p className="text-sm text-stone-300">
+            Type <strong>DELETE</strong> to confirm.
           </p>
 
           <Input
+            id="delete-confirmation"
             label="Confirmation"
-            placeholder="Type DELETE to confirm"
+            placeholder="DELETE"
             value={deleteConfirmation}
-            onChange={(e) => setDeleteConfirmation(e.target.value)}
+            onChange={(event) => setDeleteConfirmation(event.target.value)}
           />
 
-          <div className="flex flex-col md:flex-row justify-end gap-3 mt-6">
-            <Button variant="ghost" fullWidth className="md:w-auto" onClick={() => setIsDeleteModalOpen(false)}>
+          {deleteError && (
+            <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">
+              {deleteError}
+            </div>
+          )}
+
+          <div className="flex flex-col justify-end gap-3 md:flex-row">
+            <Button
+              variant="ghost"
+              className="w-full md:w-auto"
+              onClick={() => {
+                setIsDeleteModalOpen(false);
+                setDeleteConfirmation('');
+                setDeleteError(null);
+              }}
+              disabled={deleteLoading}
+            >
               Cancel
             </Button>
-            <Button 
-              variant="danger" 
-              fullWidth
-              className="md:w-auto"
-              disabled={deleteConfirmation !== 'DELETE' || loading}
-              onClick={async () => {
-                // In a real app, this would call a Supabase Function.
-                // For now, we'll sign out and show an alert as requested/planned.
-                // Or try to delete user if RLS permits (usually doesn't).
-                try {
-                  setLoading(true);
-                  // specific implementation for "Cascading delete" usually requires backend logic.
-                  // We will simulate it by signing out and redirecting.
-                  await signOut();
-                  navigate('/auth/login');
-                  alert('Account deletion request received. Your data will be removed shortly.');
-                } catch (error) {
-                  console.error(error);
-                } finally {
-                  setLoading(false);
-                  setIsDeleteModalOpen(false);
-                }
+            <Button
+              variant="danger"
+              className="w-full md:w-auto"
+              onClick={() => {
+                void handleDeleteAccount();
               }}
+              isLoading={deleteLoading}
+              disabled={!deleteConfirmValid}
             >
               Permanently Delete Account
             </Button>

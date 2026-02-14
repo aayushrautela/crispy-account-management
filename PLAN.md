@@ -1,61 +1,54 @@
-# Crispy Account Management - Project Plan
+# Crispy Account Management - Production Plan
 
-## Overview
-A standalone, responsive web application for managing "Crispy" user accounts. This portal decouples account creation and management from the main content consumption clients (WebUI, Native Apps).
+## Goal
 
-## Technical Stack
-- **Framework:** React 19 + Vite 7 (TypeScript)
-- **Styling:** Tailwind CSS 4 (Mobile-first, Clean/Minimalist, Dark/Light mode support)
-- **Backend:** Supabase (Auth & Database)
-- **State Management:** Zustand (Auth session, User profile state)
-- **Icons:** Lucide React
-- **Routing:** React Router DOM
+Keep this app production-grade and aligned with the household-based Supabase schema shared with client apps.
 
-## Architecture & Features
+## Current status
 
-### 1. Authentication (Public Routes)
-- **Sign Up:** Exclusive entry point for new account creation.
-- **Sign In:** Standard Email/Password login.
-- **Forgot Password:** Supabase password reset flow.
+### Done
 
-### 2. User Dashboard (Protected Routes)
-- **Profile Management:**
-    - **List Profiles:** View all profiles associated with the account.
-    - **Create Profile:** Add a new profile (Name, Avatar).
-    - **Edit Profile:** Rename, Change Avatar (upload to `avatars` bucket).
-    - **Delete Profile:** Remove a profile.
-- **Account Settings:**
-    - **Security:** Update Email, Change Password.
-    - **Danger Zone:** Delete Account (Cascading delete of all data).
-- **Get the app Section:**
-    - Clean cards/buttons for downloading clients:
-        - Windows
-        - Linux
-        - Android
-        - (Expandable for future platforms)
+- Household-aware auth bootstrap in `useAuthStore`.
+- Contract package added locally: `crispy-supabase-contract`.
+- Typed Supabase client with shared `Database` contract.
+- Legacy `account_id` profile access removed.
+- Profile CRUD refactored to service layer and household-scoped predicates.
+- Auth pages refactored to `authService` with schema validation.
+- Account settings refactored to `accountService` with real delete call via `delete-account` function.
+- Accessibility improvements in `Input` and `Modal` components.
+- App error boundary added.
+- CI checks and baseline tests added (`npm run ci`).
 
-### 3. Visual Design
-- **Assets:** Uses existing `logo.svg` from `Crispy-webui`.
-- **Theme:** Solid backgrounds (no gradients), high contrast, professional aesthetics.
-- **Layout:**
-    - *Mobile:* Bottom navigation or Hamburger menu.
-    - *Desktop:* Sidebar navigation or Top-bar with centered content.
+### In scope for hardening
 
-## Database Integration (Supabase)
-- **Tables:**
-    - `auth.users`: Managed by Supabase.
-    - `public.profiles`: CRUD operations for user profiles.
-    - `public.account_data`: Read-only.
-- **Storage:**
-    - `avatars` bucket: Profile image uploads.
+1. **Contract extraction**
+   - Move `crispy-supabase-contract` to dedicated repository.
+   - Publish and pin semver release in this app.
 
-## Implementation Status
-- [x] Project Scaffolding (Vite + React + TS)
-- [x] Tailwind CSS 4 Configuration
-- [x] Supabase Client Setup
-- [x] Auth Store (Zustand)
-- [x] Auth Pages (Login/Signup)
-- [x] Dashboard Layout (Sidebar/Mobile Nav)
-- [x] Profile Management (List, Add, Edit, Delete)
-- [x] Account Settings (Email, Password, Delete Account)
-- [x] Get the app Page
+2. **Observability**
+   - Add telemetry/error reporting integration (for example Sentry).
+   - Add audit logs around destructive account actions.
+
+3. **E2E coverage**
+   - Add Playwright flows for signup, login, profile CRUD, account deletion.
+
+4. **Bundle optimization**
+   - Address Vite chunk-size warning by route-level code splitting.
+
+5. **Operational readiness**
+   - Add deployment smoke checklist and rollback playbook.
+
+## Non-negotiable runtime dependencies
+
+- Supabase RPC: `ensure_household_membership`
+- Supabase Edge Function: `delete-account`
+- RLS policies aligned with household roles (`owner`/`member`)
+
+## Release checklist
+
+- [ ] All env vars configured in deployment.
+- [ ] `delete-account` function deployed and tested in staging.
+- [ ] `npm run ci` passing.
+- [ ] Signup flow tested for both email-verification and immediate-session modes.
+- [ ] Profile create/update/delete verified for household-scoped behavior.
+- [ ] Download URLs configured (or intentionally left unset for "Coming soon").

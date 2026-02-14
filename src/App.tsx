@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/useAuthStore';
 import AuthLayout from './layouts/AuthLayout';
 import DashboardLayout from './layouts/DashboardLayout';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
 import ProfileList from './pages/dashboard/ProfileList';
@@ -13,33 +14,30 @@ function App() {
   const { initialize } = useAuthStore();
 
   useEffect(() => {
-    initialize();
+    void initialize();
   }, [initialize]);
 
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Public Auth Routes */}
-        <Route path="/auth" element={<AuthLayout />}>
-          <Route path="login" element={<Login />} />
-          <Route path="signup" element={<Signup />} />
-          <Route index element={<Navigate to="/auth/login" replace />} />
-        </Route>
+    <AppErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/auth" element={<AuthLayout />}>
+            <Route path="login" element={<Login />} />
+            <Route path="signup" element={<Signup />} />
+            <Route index element={<Navigate to="/auth/login" replace />} />
+          </Route>
 
-        {/* Protected Dashboard Routes */}
-        <Route path="/dashboard" element={<DashboardLayout />}>
-          <Route index element={<ProfileList />} />
-          <Route path="account" element={<AccountSettings />} />
-          <Route path="downloads" element={<Downloads />} />
-        </Route>
+          <Route path="/dashboard" element={<DashboardLayout />}>
+            <Route index element={<ProfileList />} />
+            <Route path="account" element={<AccountSettings />} />
+            <Route path="downloads" element={<Downloads />} />
+          </Route>
 
-        {/* Root Redirect */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        
-        {/* Catch all */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </BrowserRouter>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AppErrorBoundary>
   );
 }
 

@@ -1,83 +1,82 @@
 # Crispy Account Management
 
-A standalone, production-grade React application for managing Crispy accounts. This portal decouples authentication and user management from the main content consumption clients.
+Household-aware account portal for Crispy. This app manages authentication, profiles, and account security against the updated Supabase schema.
 
-## Features
+## What changed
 
-- **Authentication**: Secure sign-up, sign-in, and password recovery powered by Supabase Auth.
-- **Profile Management**:
-  - Create, Edit, and Delete profiles.
-  - Upload profile avatars (stored in Supabase Storage).
-  - Manage multiple profiles under a single account.
-- **Account Security**:
-  - Update Email and Password.
-  - "Danger Zone" for account deletion.
-- **Get the app**: Access client downloads for Windows, Linux, and Android.
-- **Modern UI**: Clean, minimalist dark-mode interface built with Tailwind CSS and Lucide icons.
+- Migrated from legacy account-scoped profile access to household-scoped access (`household_id`).
+- Added household bootstrap flow using `ensure_household_membership`.
+- Added a shared contract package from npm (`@crispy-streaming/supabase-contract`).
+- Refactored Supabase writes into service modules with shared validation and error mapping.
+- Replaced simulated account deletion with Edge Function invocation (`delete-account`).
+- Added CI checks (`lint`, `test`, `build`) and baseline unit tests.
 
-## Tech Stack
+## Architecture
 
-- **Framework**: React 19 + Vite 7 (TypeScript)
-- **Styling**: Tailwind CSS 4
-- **State Management**: Zustand
-- **Backend**: Supabase (Auth, Database, Storage)
-- **Routing**: React Router DOM
+- **Frontend**: React 19 + Vite + TypeScript
+- **State**: Zustand (`src/store/useAuthStore.ts`)
+- **Data layer**: service modules in `src/services/`
+- **Contract**: `@crispy-streaming/supabase-contract` package with typed tables/RPCs and Zod validators
+- **Backend**: Supabase Auth + Postgres + Storage + Edge Functions
 
-## Getting Started
+## Required Supabase contract
 
-### Prerequisites
+This app assumes the updated schema with:
 
-- Node.js (v18 or higher)
-- npm or yarn
+- `public.households`
+- `public.household_members`
+- `public.profiles`
+- `public.profile_data`
+- `public.addons`
+- RPC: `ensure_household_membership`
 
-### Installation
+## Environment variables
 
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/your-username/crispy-account-management.git
-    cd crispy-account-management
-    ```
+Create `.env` in repo root:
 
-2.  Install dependencies:
-    ```bash
-    npm install
-    ```
+```env
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+VITE_DOWNLOAD_URL_WINDOWS=
+VITE_DOWNLOAD_URL_ANDROID=
+VITE_DOWNLOAD_URL_LINUX=
+```
 
-3.  Configure Environment Variables:
-    Create a `.env` file in the root directory with your Supabase credentials:
-    ```env
-    VITE_SUPABASE_URL=your_supabase_url
-    VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-    ```
+Optional download URLs power the **Get the app** page. If unset, the UI shows "Coming soon".
 
-### Running the Application
+## Edge function dependency
 
-Start the development server:
+Account deletion requires a deployed Supabase Edge Function named:
+
+- `delete-account`
+
+The function should perform authenticated user deletion server-side (service role) and cascade according to your database policies.
+
+## Development
+
 ```bash
+npm install
 npm run dev
 ```
 
-Build for production:
+## Quality gates
+
 ```bash
+npm run lint
+npm run test
 npm run build
+
+# full local gate
+npm run ci
 ```
 
-Preview the production build:
-```bash
-npm run preview
-```
+## Key folders
 
-## Project Structure
+- `src/services/`: auth/account/profile/household APIs
+- `src/store/`: session + household bootstrap state
+- `src/pages/`: auth and dashboard routes
+- `src/components/`: shared UI and feature forms
 
-- `src/layouts`: Auth and Dashboard layouts.
-- `src/pages`:
-  - `auth/`: Login, Signup pages.
-  - `dashboard/`: Profile List, Account Settings, Get the app
-- `src/components`: Reusable UI components (Button, Input, Modal, ProfileForm).
-- `src/store`: Zustand stores (useAuthStore).
-- `src/lib`: Supabase client and utility functions.
-- `src/types`: TypeScript interfaces.
+## Contract dependency
 
-## Deployment
-
-This project is ready for deployment on Vercel, Netlify, or any static site host. Ensure you add the environment variables in your deployment settings.
+`@crispy-streaming/supabase-contract` is consumed from npm (see `package.json`).
