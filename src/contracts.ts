@@ -10,6 +10,7 @@ export {
 export type {
   Database,
   HouseholdMemberRow,
+  HouseholdPrimaryProfileRow,
   HouseholdRole,
   MembershipRecord,
   ProfileRow,

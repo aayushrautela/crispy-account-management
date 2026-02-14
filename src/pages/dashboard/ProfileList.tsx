@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Edit2, Loader2, Plus, Trash2, User } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
@@ -10,23 +10,16 @@ import { mapSupabaseError } from '../../lib/errors';
 import {
   createProfile,
   deleteProfile,
+  getPrimaryProfile,
   listProfiles,
+  sortProfilesByPrimaryRule,
   updateProfile,
 } from '../../services/profileService';
-
-function sortProfiles(items: Profile[]): Profile[] {
-  return [...items].sort((left, right) => {
-    if (left.order_index === right.order_index) {
-      return left.created_at.localeCompare(right.created_at);
-    }
-
-    return left.order_index - right.order_index;
-  });
-}
 
 export default function ProfileList() {
   const { user, householdId, status } = useAuthStore();
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [primaryProfileId, setPrimaryProfileId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -36,14 +29,10 @@ export default function ProfileList() {
 
   const canManageProfiles = status === 'authenticated' && !!householdId && !!user;
 
-  const primaryProfileId = useMemo(() => {
-    const sorted = sortProfiles(profiles);
-    return sorted[0]?.id ?? null;
-  }, [profiles]);
-
   const fetchProfiles = useCallback(async () => {
     if (!canManageProfiles || !householdId) {
       setProfiles([]);
+      setPrimaryProfileId(null);
       setLoading(false);
       return;
     }
@@ -53,7 +42,11 @@ export default function ProfileList() {
 
     try {
       const result = await listProfiles(householdId);
-      setProfiles(sortProfiles(result));
+      const sortedProfiles = sortProfilesByPrimaryRule(result);
+      setProfiles(sortedProfiles);
+
+      const primaryProfile = await getPrimaryProfile(householdId, sortedProfiles);
+      setPrimaryProfileId(primaryProfile?.id ?? null);
     } catch (fetchError) {
       setError(mapSupabaseError(fetchError, 'Failed to load profiles.'));
     } finally {
@@ -77,7 +70,9 @@ export default function ProfileList() {
       avatar: payload.avatar,
     });
 
-    setProfiles((current) => sortProfiles([...current, created]));
+    const nextProfiles = sortProfilesByPrimaryRule([...profiles, created]);
+    setProfiles(nextProfiles);
+    setPrimaryProfileId(nextProfiles[0]?.id ?? null);
     setIsModalOpen(false);
     setEditingProfile(null);
   };
@@ -94,9 +89,11 @@ export default function ProfileList() {
       avatar: payload.avatar,
     });
 
-    setProfiles((current) =>
-      sortProfiles(current.map((profile) => (profile.id === updated.id ? updated : profile))),
+    const nextProfiles = sortProfilesByPrimaryRule(
+      profiles.map((profile) => (profile.id === updated.id ? updated : profile)),
     );
+    setProfiles(nextProfiles);
+    setPrimaryProfileId(nextProfiles[0]?.id ?? null);
     setIsModalOpen(false);
     setEditingProfile(null);
   };
@@ -117,7 +114,9 @@ export default function ProfileList() {
 
     try {
       await deleteProfile(householdId, profileToDelete.id);
-      setProfiles((current) => current.filter((profile) => profile.id !== profileToDelete.id));
+      const nextProfiles = profiles.filter((profile) => profile.id !== profileToDelete.id);
+      setProfiles(nextProfiles);
+      setPrimaryProfileId(nextProfiles[0]?.id ?? null);
       setProfileToDelete(null);
     } catch (deleteError) {
       setError(mapSupabaseError(deleteError, 'Failed to delete profile.'));

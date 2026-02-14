@@ -2,7 +2,7 @@ import {
   avatarUrlSchema,
   profileNameSchema,
 } from '../contracts';
-import type { Profile } from '../types';
+import type { HouseholdPrimaryProfile, Profile } from '../types';
 import { supabase } from '../lib/supabase';
 import { mapSupabaseError } from '../lib/errors';
 
@@ -18,6 +18,25 @@ export interface UpdateProfileInput {
   profileId: string;
   name: string;
   avatar: string | null;
+}
+
+function compareProfilesForPrimary(
+  left: Pick<Profile, 'order_index' | 'created_at' | 'id'>,
+  right: Pick<Profile, 'order_index' | 'created_at' | 'id'>,
+): number {
+  if (left.order_index !== right.order_index) {
+    return left.order_index - right.order_index;
+  }
+
+  if (left.created_at !== right.created_at) {
+    return left.created_at.localeCompare(right.created_at);
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
+export function sortProfilesByPrimaryRule(items: Profile[]): Profile[] {
+  return [...items].sort(compareProfilesForPrimary);
 }
 
 function normalizeProfilePayload(name: string, avatar: string | null): { name: string; avatar: string | null } {
@@ -52,13 +71,45 @@ export async function listProfiles(householdId: string): Promise<Profile[]> {
     .select('*')
     .eq('household_id', householdId)
     .order('order_index', { ascending: true })
-    .order('created_at', { ascending: true });
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true });
 
   if (error) {
     throw new Error(mapSupabaseError(error, 'Failed to load profiles.'));
   }
 
   return data ?? [];
+}
+
+function isMissingRelationError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  const maybeCode = 'code' in error ? String(error.code) : '';
+  return maybeCode === '42P01';
+}
+
+export async function getPrimaryProfile(
+  householdId: string,
+  fallbackProfiles: Profile[] = [],
+): Promise<HouseholdPrimaryProfile | null> {
+  const { data, error } = await supabase
+    .from('household_primary_profiles')
+    .select('*')
+    .eq('household_id', householdId)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingRelationError(error)) {
+      const sortedFallback = sortProfilesByPrimaryRule(fallbackProfiles);
+      return sortedFallback[0] ?? null;
+    }
+
+    throw new Error(mapSupabaseError(error, 'Failed to load primary profile.'));
+  }
+
+  return data;
 }
 
 export async function createProfile(input: SaveProfileInput): Promise<Profile> {
