@@ -6,6 +6,7 @@ import DashboardLayout from './layouts/DashboardLayout';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
+import Onboarding from './pages/auth/Onboarding';
 import ProfileList from './pages/dashboard/ProfileList';
 import AccountSettings from './pages/dashboard/AccountSettings';
 import Addons from './pages/dashboard/Addons';
@@ -25,6 +26,7 @@ function App() {
           <Route path="/auth" element={<AuthLayout />}>
             <Route path="login" element={<Login />} />
             <Route path="signup" element={<Signup />} />
+            <Route path="onboarding" element={<Onboarding />} />
             <Route index element={<Navigate to="/auth/login" replace />} />
           </Route>
 

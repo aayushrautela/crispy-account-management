@@ -28,11 +28,6 @@ export async function deleteCurrentAccount(): Promise<void> {
   });
 
   if (error) {
-    throw new Error(
-      mapSupabaseError(
-        error,
-        `Failed to delete account. Ensure the ${DELETE_ACCOUNT_FUNCTION} edge function is deployed.`,
-      ),
-    );
+    throw new Error(mapSupabaseError(error, 'Failed to delete account.'));
   }
 }

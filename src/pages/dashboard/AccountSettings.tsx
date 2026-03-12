@@ -235,8 +235,8 @@ export default function AccountSettings() {
 
         <div className="space-y-4 border-t border-stone-800/50 py-4">
           <p className="text-sm text-stone-300">
-            Deleting your account permanently removes your household memberships, profiles, and related
-            data.
+            Deleting your account removes your login and household access. If you are the last owner,
+            the household and related profile data are deleted too.
           </p>
           <Button
             variant="danger"
@@ -264,7 +264,8 @@ export default function AccountSettings() {
           <div className="flex gap-3 rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-red-400">
             <AlertTriangle className="h-5 w-5 shrink-0" />
             <p className="text-sm">
-              This action cannot be undone. Ensure your `delete-account` Supabase edge function is deployed.
+              This action cannot be undone. Shared households stay available to other members, but any
+              household you solely own is removed with its related data.
             </p>
           </div>
 

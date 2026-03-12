@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Session, Subscription, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { ensureHouseholdMembership } from '../services/householdService';
+import { getOnboardingState, type OnboardingStatus, type SyncService } from '../services/onboardingService';
 import { StorageService } from '../lib/storage';
 import { toErrorMessage } from '../lib/errors';
 import type { HouseholdRole } from '../types';
@@ -13,11 +14,16 @@ interface AuthState {
   user: User | null;
   householdId: string | null;
   membershipRole: HouseholdRole | null;
+  onboardingStatus: OnboardingStatus;
+  onboardingProfileId: string | null;
+  selectedSyncService: SyncService | null;
+  connectedSyncService: SyncService | null;
   status: AuthStatus;
   loading: boolean;
   error: string | null;
   initialize: () => Promise<void>;
   refreshMembership: () => Promise<void>;
+  refreshOnboarding: () => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
 }
@@ -31,12 +37,16 @@ export const useAuthStore = create<AuthState>((set, get) => {
     StorageService.clearAllSessionScope();
     set({
       session: null,
-      user: null,
-      householdId: null,
-      membershipRole: null,
-      status: 'anonymous',
-      loading: false,
-      error: null,
+        user: null,
+        householdId: null,
+        membershipRole: null,
+        onboardingStatus: 'unknown',
+        onboardingProfileId: null,
+        selectedSyncService: null,
+        connectedSyncService: null,
+        status: 'anonymous',
+        loading: false,
+        error: null,
     });
   };
 
@@ -53,6 +63,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
     try {
       const membership = await ensureHouseholdMembership(session.user.id);
+      const onboarding = await getOnboardingState({
+        householdId: membership.household_id,
+        userId: session.user.id,
+      });
 
       if (currentToken !== syncToken) {
         return;
@@ -64,6 +78,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
         user: session.user,
         householdId: membership.household_id,
         membershipRole: membership.role,
+        onboardingStatus: onboarding.status,
+        onboardingProfileId: onboarding.profileId,
+        selectedSyncService: onboarding.selectedService,
+        connectedSyncService: onboarding.connectedService,
         status: 'authenticated',
         loading: false,
         error: null,
@@ -78,6 +96,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
         user: session.user,
         householdId: null,
         membershipRole: null,
+        onboardingStatus: 'unknown',
+        onboardingProfileId: null,
+        selectedSyncService: null,
+        connectedSyncService: null,
         status: 'error',
         loading: false,
         error: toErrorMessage(error, 'Unable to initialize account membership.'),
@@ -138,16 +160,52 @@ export const useAuthStore = create<AuthState>((set, get) => {
     await syncSession(session);
   };
 
+  const refreshOnboarding = async (): Promise<void> => {
+    const { user, householdId } = get();
+
+    if (!user || !householdId) {
+      setAnonymous();
+      return;
+    }
+
+    try {
+      set({ loading: true, onboardingStatus: 'unknown', error: null });
+      const onboarding = await getOnboardingState({
+        householdId,
+        userId: user.id,
+      });
+
+      set({
+        onboardingStatus: onboarding.status,
+        onboardingProfileId: onboarding.profileId,
+        selectedSyncService: onboarding.selectedService,
+        connectedSyncService: onboarding.connectedService,
+        loading: false,
+      });
+    } catch (error) {
+      set({
+        status: 'error',
+        loading: false,
+        error: toErrorMessage(error, 'Unable to refresh onboarding status.'),
+      });
+    }
+  };
+
   return {
     session: null,
     user: null,
     householdId: null,
     membershipRole: null,
+    onboardingStatus: 'unknown',
+    onboardingProfileId: null,
+    selectedSyncService: null,
+    connectedSyncService: null,
     status: 'booting',
     loading: true,
     error: null,
     initialize,
     refreshMembership,
+    refreshOnboarding,
     signOut: async () => {
       try {
         await supabase.auth.signOut();

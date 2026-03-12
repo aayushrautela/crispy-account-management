@@ -1,10 +1,13 @@
-import { Navigate, Outlet } from 'react-router-dom';
-import logo from '../assets/logo.svg';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import logoWordmark from '../assets/logo-wordmark.svg';
 import { Button } from '../components/ui/Button';
 import { useAuthStore } from '../store/useAuthStore';
 
 export default function AuthLayout() {
-  const { user, status, error, clearError, initialize } = useAuthStore();
+  const { user, status, onboardingStatus, error, clearError, initialize } = useAuthStore();
+  const location = useLocation();
+  const isSignupRoute = location.pathname === '/auth/signup';
+  const isOnboardingRoute = location.pathname === '/auth/onboarding';
 
   if (status === 'booting') {
     return (
@@ -14,8 +17,12 @@ export default function AuthLayout() {
     );
   }
 
-  if (status === 'authenticated' && user) {
-    return <Navigate to="/dashboard" replace />;
+  if (status === 'authenticated' && user && !isOnboardingRoute) {
+    return <Navigate to={onboardingStatus === 'required' ? '/auth/onboarding' : '/dashboard'} replace />;
+  }
+
+  if (status === 'anonymous' && isOnboardingRoute) {
+    return <Navigate to="/auth/login" replace />;
   }
 
   if (status === 'error') {
@@ -41,21 +48,66 @@ export default function AuthLayout() {
   }
 
   return (
-    <div
-      className="relative flex min-h-screen flex-col bg-cover bg-center bg-no-repeat p-4 text-white"
-      style={{ backgroundImage: 'url(/backdrop.png)' }}
-    >
-      <div className="absolute inset-0 bg-stone-900/80" />
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-stone-950 text-white selection:bg-white/10">
+      {/* Background Layer */}
+      <div
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000"
+        style={{ backgroundImage: 'url(/auth-signup-backdrop.jpg)' }}
+      />
+      <div className="fixed inset-0 bg-gradient-to-tr from-stone-950 via-stone-950/80 to-stone-900/40" />
+      <div className="fixed inset-0 backdrop-blur-[2px]" />
 
-      <div className="relative z-10 flex items-center gap-3">
-        <img src={logo} alt="Crispy" className="h-10 w-10" />
-        <h1 className="text-2xl font-black tracking-tight text-white">Crispy</h1>
-      </div>
+      <div className="relative z-10 flex min-h-screen flex-col">
+        {/* Header */}
+        <header className="px-6 py-8 sm:px-10 lg:px-12">
+          <img src={logoWordmark} alt="Crispy tv" className="h-10 w-auto sm:h-12" />
+        </header>
 
-      <div className="relative z-10 flex flex-1 flex-col items-center justify-start pt-[10vh]">
-        <div className="w-full max-w-md">
-          <Outlet />
-        </div>
+        {/* Content */}
+        <main className="flex flex-1 items-center px-6 pb-12 sm:px-10 lg:px-12">
+          <div className="mx-auto w-full max-w-7xl">
+            {isSignupRoute ? (
+              <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-24">
+                <div className="max-w-2xl space-y-6 lg:space-y-8">
+                  <div className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">
+                    Streaming companion
+                  </div>
+                  <div className="space-y-4 lg:space-y-6">
+                    <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-7xl lg:leading-[1.1]">
+                      Bring your lists and AI setup together.
+                    </h1>
+                    <p className="max-w-lg text-lg leading-relaxed text-stone-300 sm:text-xl">
+                      Create your Crispy tv account, pick Trakt or SIMKL, then add an OpenRouter key if you want AI-powered
+                      recommendations.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    {['Trakt or SIMKL', 'Optional OpenRouter', 'Start watching faster'].map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full border border-white/5 bg-white/5 px-4 py-1.5 text-sm font-medium text-stone-300 backdrop-blur-md"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex justify-center lg:justify-end">
+                  <div className="w-full max-w-lg">
+                    <Outlet />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-center">
+                <div className={`w-full ${location.pathname === '/auth/onboarding' ? 'max-w-4xl' : 'max-w-md'}`}>
+                  <Outlet />
+                </div>
+              </div>
+            )}
+          </div>
+        </main>
       </div>
     </div>
   );

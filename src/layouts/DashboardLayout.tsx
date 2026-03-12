@@ -31,8 +31,8 @@ function SidebarContent({ pathname, onNavigate, onSignOut, signingOut }: Sidebar
     <>
       <div className="p-6">
         <div className="flex items-center gap-3">
-          <img src={logo} alt="Crispy" className="h-10 w-10" />
-          <span className="text-2xl font-black tracking-tight text-white">Crispy</span>
+          <img src={logo} alt="Crispy tv" className="h-10 w-10" />
+          <span className="text-2xl font-black tracking-tight text-white">Crispy tv</span>
         </div>
       </div>
 
@@ -77,7 +77,7 @@ function SidebarContent({ pathname, onNavigate, onSignOut, signingOut }: Sidebar
 }
 
 export default function DashboardLayout() {
-  const { user, householdId, status, error, clearError, initialize, signOut } = useAuthStore();
+  const { user, householdId, onboardingStatus, status, error, clearError, initialize, signOut } = useAuthStore();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -122,6 +122,18 @@ export default function DashboardLayout() {
         Resolving household context...
       </div>
     );
+  }
+
+  if (onboardingStatus === 'unknown') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-stone-900 text-sm text-stone-300">
+        Checking your setup...
+      </div>
+    );
+  }
+
+  if (onboardingStatus === 'required') {
+    return <Navigate to="/auth/onboarding" replace />;
   }
 
   const handleSignOut = async (): Promise<void> => {

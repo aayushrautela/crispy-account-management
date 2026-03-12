@@ -37,12 +37,21 @@ Create `.env` in repo root:
 ```env
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
+VITE_TRAKT_CLIENT_ID=
+VITE_TRAKT_REDIRECT_URI=http://localhost:5173/auth/onboarding
+VITE_SIMKL_CLIENT_ID=
 VITE_DOWNLOAD_URL_WINDOWS=
 VITE_DOWNLOAD_URL_ANDROID=
 VITE_DOWNLOAD_URL_LINUX=
 ```
 
 Optional download URLs power the **Get the app** page. If unset, the UI shows "Coming soon".
+
+Provider auth setup:
+
+- Register a Trakt app and allow the same redirect URI you set in `VITE_TRAKT_REDIRECT_URI`
+- Register a SIMKL app and copy its client id into `VITE_SIMKL_CLIENT_ID`
+- The onboarding callback route is `/auth/onboarding`
 
 ## Edge function dependency
 

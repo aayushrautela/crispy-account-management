@@ -86,7 +86,7 @@ export default function Downloads() {
       <Card className="border-stone-700 p-5">
         <h3 className="text-sm font-semibold text-white">Need another platform?</h3>
         <p className="mt-1 text-sm text-stone-400">
-          iOS and macOS builds are in private beta. Contact the Crispy team for early access.
+          iOS and macOS builds are in private beta. Contact the Crispy tv team for early access.
         </p>
       </Card>
     </div>

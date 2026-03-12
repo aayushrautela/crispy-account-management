@@ -30,23 +30,25 @@ export default function Login() {
   };
 
   return (
-    <div className="w-full">
-      <div className="mb-8 text-center">
-        <h1 className="text-3xl font-bold tracking-tight text-white">Welcome Back</h1>
-        <p className="mt-1 text-sm text-stone-500">Sign in to manage your household account</p>
+    <div className="w-full space-y-8 rounded-[32px] border border-white/10 bg-stone-950/40 p-8 shadow-[0_32px_96px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:p-10">
+      <div className="space-y-2 text-center sm:text-left">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-stone-400">Welcome back</p>
+        <h1 className="text-3xl font-bold tracking-tight text-white">Sign In</h1>
+        <p className="text-sm leading-relaxed text-stone-400">Jump back into Crispy tv and pick up where you left off.</p>
       </div>
 
-      <div className="rounded-2xl border border-stone-600 bg-stone-800 p-8 shadow-2xl shadow-black/20">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            id="email"
-            type="email"
-            label="Email"
-            placeholder="you@example.com"
-            value={formData.email}
-            onChange={(event) => setFormData((current) => ({ ...current, email: event.target.value }))}
-            required
-          />
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <Input
+          id="email"
+          type="email"
+          label="Email"
+          placeholder="you@example.com"
+          value={formData.email}
+          onChange={(event) => setFormData((current) => ({ ...current, email: event.target.value }))}
+          className="h-12 rounded-2xl border-white/10 bg-stone-900/50 text-white placeholder:text-stone-500 focus:border-white focus:ring-white/20"
+          required
+        />
+        <div className="space-y-1">
           <Input
             id="password"
             type="password"
@@ -54,26 +56,42 @@ export default function Login() {
             placeholder="••••••••"
             value={formData.password}
             onChange={(event) => setFormData((current) => ({ ...current, password: event.target.value }))}
+            className="h-12 rounded-2xl border-white/10 bg-stone-900/50 text-white placeholder:text-stone-500 focus:border-white focus:ring-white/20"
             required
           />
-
-          {error && (
-            <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-500">
-              {error}
-            </div>
-          )}
-
-          <Button type="submit" className="mt-2 h-11 w-full font-semibold" isLoading={loading}>
-            Sign In
-          </Button>
-        </form>
-
-        <div className="mt-8 text-center text-sm text-stone-500">
-          Don't have an account?{' '}
-          <Link to="/auth/signup" className="font-semibold text-white transition-colors hover:text-stone-300">
-            Sign up
-          </Link>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="text-xs font-medium text-stone-400 transition hover:text-white"
+              onClick={() => {
+                /* TODO: Forgot password flow */
+              }}
+            >
+              Forgot password?
+            </button>
+          </div>
         </div>
+
+        {error && (
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        <Button
+          type="submit"
+          className="h-12 w-full rounded-2xl bg-white font-bold text-stone-950 transition-all hover:scale-[1.02] hover:bg-stone-100 active:scale-[0.98]"
+          isLoading={loading}
+        >
+          Continue
+        </Button>
+      </form>
+
+      <div className="text-center text-sm text-stone-500">
+        Don't have an account?{' '}
+        <Link to="/auth/signup" className="font-bold text-white transition-colors hover:text-stone-300">
+          Create one
+        </Link>
       </div>
     </div>
   );
