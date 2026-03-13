@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, Edit2, Link2, Loader2, Plus, Trash2, User } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Loader2, Plus, User, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
@@ -8,7 +8,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import type { Profile } from '../../types';
 import { resolveAvatarUrl } from '../../lib/avatar';
 import { mapSupabaseError } from '../../lib/errors';
-import { listProfileOnboardingStates, type OnboardingState } from '../../services/onboardingService';
+import { listProfileOnboardingStates, type OnboardingState, type SyncService } from '../../services/onboardingService';
 import {
   createProfile,
   deleteProfile,
@@ -17,19 +17,90 @@ import {
   sortProfilesByPrimaryRule,
   updateProfile,
 } from '../../services/profileService';
+import traktLogo from '../../assets/brands/trakt.svg';
+import simklLogo from '../../assets/brands/simkl.svg';
+
+type ProfileRecord = Profile & { last_active_at?: string | null };
+
+const serviceMeta: Record<Exclude<SyncService, null>, { label: string; logo: string; description: string }> = {
+  trakt: {
+    label: 'Trakt',
+    logo: traktLogo,
+    description: 'Sync watch history and lists with Trakt for this profile.',
+  },
+  simkl: {
+    label: 'SIMKL',
+    logo: simklLogo,
+    description: 'Use SIMKL instead when this profile tracks a separate library there.',
+  },
+};
+
+function formatLastActive(value: string | null | undefined): string {
+  if (!value) {
+    return 'No recent activity';
+  }
+
+  const timestamp = Date.parse(value);
+
+  if (Number.isNaN(timestamp)) {
+    return 'Recently active';
+  }
+
+  const diffMs = Date.now() - timestamp;
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+
+  if (diffMs < 5 * minute) {
+    return 'Active just now';
+  }
+
+  if (diffMs < hour) {
+    return `Last active ${Math.max(1, Math.round(diffMs / minute))}m ago`;
+  }
+
+  if (diffMs < day) {
+    return `Last active ${Math.max(1, Math.round(diffMs / hour))}h ago`;
+  }
+
+  if (diffMs < 2 * day) {
+    return 'Last active yesterday';
+  }
+
+  return `Last active ${Math.max(2, Math.round(diffMs / day))}d ago`;
+}
+
+function ServiceBadge({ service }: { service: SyncService | null }) {
+  if (!service) {
+    return (
+      <span className="inline-flex items-center text-sm font-medium text-stone-500">
+        None
+      </span>
+    );
+  }
+
+  const meta = serviceMeta[service];
+
+  return (
+    <span className="inline-flex items-center gap-2 text-sm font-medium text-stone-300">
+      <img src={meta.logo} alt="" className="h-4 w-4" aria-hidden="true" />
+      {meta.label}
+    </span>
+  );
+}
 
 export default function ProfileList() {
   const navigate = useNavigate();
   const { user, householdId, status } = useAuthStore();
-  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profiles, setProfiles] = useState<ProfileRecord[]>([]);
   const [profileStates, setProfileStates] = useState<Record<string, OnboardingState>>({});
   const [primaryProfileId, setPrimaryProfileId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
-  const [serviceModalProfile, setServiceModalProfile] = useState<Profile | null>(null);
-  const [profileToDelete, setProfileToDelete] = useState<Profile | null>(null);
+  const [editingProfile, setEditingProfile] = useState<ProfileRecord | null>(null);
+  const [serviceModalProfile, setServiceModalProfile] = useState<ProfileRecord | null>(null);
+  const [profileToDelete, setProfileToDelete] = useState<ProfileRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const canManageProfiles = status === 'authenticated' && !!householdId && !!user;
@@ -47,8 +118,8 @@ export default function ProfileList() {
     setError(null);
 
     try {
-      const result = await listProfiles(householdId);
-      const sortedProfiles = sortProfilesByPrimaryRule(result);
+      const result = (await listProfiles(householdId)) as ProfileRecord[];
+      const sortedProfiles = sortProfilesByPrimaryRule(result) as ProfileRecord[];
       setProfiles(sortedProfiles);
       setProfileStates(await listProfileOnboardingStates(sortedProfiles.map((profile) => profile.id)));
 
@@ -100,7 +171,11 @@ export default function ProfileList() {
     setEditingProfile(null);
   };
 
-  const handleConnectService = (profile: Profile, provider: 'trakt' | 'simkl') => {
+  const handleConnectService = (profile: ProfileRecord, provider: SyncService) => {
+    if (!provider) {
+      return;
+    }
+
     setServiceModalProfile(null);
     navigate(
       `/auth/connect/${provider}?targetProfileId=${encodeURIComponent(profile.id)}&returnTo=${encodeURIComponent('/dashboard')}`,
@@ -137,144 +212,183 @@ export default function ProfileList() {
     }
   };
 
+  const summary = useMemo(() => {
+    const totalProfiles = profiles.length;
+    const connectedProfiles = profiles.filter((profile) => profileStates[profile.id]?.connectedService).length;
+    const aiReadyProfiles = profiles.filter((profile) => profileStates[profile.id]?.openRouterConfigured).length;
+
+    return {
+      totalProfiles,
+      connectedProfiles,
+      aiReadyProfiles,
+    };
+  }, [profileStates, profiles]);
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-amber-500" />
+        <Loader2 className="h-6 w-6 animate-spin text-stone-400" />
       </div>
     );
   }
 
   if (!canManageProfiles) {
     return (
-      <div className="rounded-2xl border border-stone-700 bg-stone-800/50 p-6 text-sm text-stone-300">
+      <div className="rounded-lg border border-stone-800 bg-stone-900/30 p-5 text-sm text-stone-400">
         Account membership is still loading. Refresh the page if this persists.
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">Profiles</h1>
-          <p className="mt-0.5 text-sm text-stone-500">Manage profile identities inside your household.</p>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-stone-800 pb-5">
+        <div className="space-y-1">
+          <h1 className="text-xl font-medium text-white">Profiles & connections</h1>
+          <p className="text-sm text-stone-500">
+            Manage each profile, choose its sync source, and configure OpenRouter keys.
+          </p>
         </div>
+
         <Button
           onClick={() => {
             setEditingProfile(null);
             setIsModalOpen(true);
           }}
-          size="sm"
-          className="h-9 w-full px-4 font-semibold md:w-auto"
+          className="h-9 px-4 text-sm font-medium"
         >
-          <Plus size={18} className="mr-1.5" />
-          Add Profile
+          <Plus size={16} className="mr-1.5" />
+          Add profile
         </Button>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">
-          {error}
-        </div>
+        <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">{error}</div>
       )}
 
-      <div className="space-y-3">
-        {profiles.map((profile) => {
-          const avatarUrl = resolveAvatarUrl(profile.avatar);
-          const isPrimary = profile.id === primaryProfileId;
-          const profileState = profileStates[profile.id];
-          const traktConnected = profileState?.traktConnected ?? false;
-          const simklConnected = profileState?.simklConnected ?? false;
-
-          return (
-            <div
-              key={profile.id}
-              className="group flex items-center justify-between rounded-2xl border border-stone-600 bg-stone-800 p-4 shadow-xl shadow-black/10 transition-all hover:border-stone-500 hover:bg-stone-700"
-            >
-              <div className="min-w-0 flex items-center gap-4">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-stone-700/50 bg-stone-800/50 shadow-inner">
-                  {avatarUrl ? (
-                    <img src={avatarUrl} alt={profile.name} className="h-full w-full object-cover" />
-                  ) : (
-                    <User size={28} className="text-stone-500" />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="truncate text-base font-semibold text-white">{profile.name}</h3>
-                    {isPrimary && (
-                      <span className="rounded border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">
-                        Primary
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-[10px] font-mono text-stone-600">ID: {profile.id.slice(0, 8).toUpperCase()}</span>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
-                        traktConnected
-                          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
-                          : 'border-stone-700 bg-stone-900/70 text-stone-400'
-                      }`}
-                    >
-                      {traktConnected && <CheckCircle2 size={12} />}
-                      Trakt {traktConnected ? 'linked' : 'not linked'}
-                    </span>
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
-                        simklConnected
-                          ? 'border-sky-500/20 bg-sky-500/10 text-sky-200'
-                          : 'border-stone-700 bg-stone-900/70 text-stone-400'
-                      }`}
-                    >
-                      {simklConnected && <CheckCircle2 size={12} />}
-                      SIMKL {simklConnected ? 'linked' : 'not linked'}
-                    </span>
-                  </div>
-                </div>
+      <div className="grid gap-8 lg:grid-cols-[1fr_280px]">
+        <div className="space-y-4">
+          {profiles.length === 0 && (
+            <div className="rounded-lg border border-stone-800 bg-stone-900/30 p-8 text-center">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg border border-stone-800 bg-stone-950">
+                <Users className="h-5 w-5 text-stone-500" />
               </div>
+              <h2 className="mt-4 text-sm font-medium text-white">No profiles yet</h2>
+              <p className="mx-auto mt-2 max-w-md text-sm text-stone-500">
+                Create the first household profile to start syncing watch history and profile-specific AI setup.
+              </p>
+            </div>
+          )}
 
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setServiceModalProfile(profile)}>
-                  <Link2 size={16} className="mr-1.5" />
-                  Services
-                </Button>
-                <button
-                  onClick={() => {
-                    setEditingProfile(profile);
-                    setIsModalOpen(true);
-                  }}
-                  className="rounded-lg p-2 text-stone-400 transition-colors hover:bg-stone-800 hover:text-white"
-                  title="Profile Settings"
+          <div className="flex flex-col gap-4">
+            {profiles.map((profile) => {
+              const avatarUrl = resolveAvatarUrl(profile.avatar);
+              const isPrimary = profile.id === primaryProfileId;
+              const profileState = profileStates[profile.id];
+              const connectedService = profileState?.connectedService ?? null;
+              const aiConfigured = profileState?.openRouterConfigured ?? false;
+
+              return (
+                <div
+                  key={profile.id}
+                  className="flex flex-col gap-5 rounded-lg border border-stone-800 bg-stone-900/30 p-5 lg:flex-row lg:items-center lg:justify-between"
                 >
-                  <Edit2 size={18} />
-                </button>
-                {!isPrimary && (
-                  <button
-                    onClick={() => setProfileToDelete(profile)}
-                    className="rounded-lg p-2 text-red-400/80 transition-colors hover:bg-red-400/10 hover:text-red-400"
-                    title="Delete Profile"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                )}
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-stone-800 bg-stone-950">
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt={profile.name} className="h-full w-full object-cover" />
+                      ) : (
+                        <User className="h-5 w-5 text-stone-600" />
+                      )}
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-sm font-medium text-white">{profile.name}</h2>
+                        {isPrimary && (
+                          <span className="rounded border border-stone-700 bg-stone-800 px-1.5 py-0.5 text-[10px] font-medium text-stone-300">
+                            Primary
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-stone-500">{formatLastActive(profile.last_active_at)}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-8 border-t border-stone-800 pt-4 lg:border-t-0 lg:pt-0">
+                    <div className="flex items-center gap-6 sm:gap-8 justify-between lg:justify-end w-full sm:w-auto">
+                      <div className="flex flex-col items-start w-28">
+                        <span className="mb-1 text-xs text-stone-500">Sync Source</span>
+                        <ServiceBadge service={connectedService} />
+                      </div>
+
+                      <div className="flex flex-col items-start w-24">
+                        <span className="mb-1 text-xs text-stone-500">AI Setup</span>
+                        <span className="text-sm font-medium text-stone-300">
+                          {aiConfigured ? 'Configured' : 'Not added'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 justify-end">
+                      <Button variant="secondary" size="sm" onClick={() => setServiceModalProfile(profile)}>
+                        Connections
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setEditingProfile(profile);
+                          setIsModalOpen(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      {!isPrimary && (
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setProfileToDelete(profile)}
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          Delete
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="rounded-lg border border-stone-800 bg-stone-900/30 p-5">
+            <h3 className="mb-4 text-sm font-medium text-white">Overview</h3>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-stone-500">Total profiles</p>
+                <p className="text-sm font-medium text-stone-300">{summary.totalProfiles}</p>
+              </div>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-stone-500">Sync connected</p>
+                <p className="text-sm font-medium text-stone-300">{summary.connectedProfiles}</p>
+              </div>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-stone-500">AI ready</p>
+                <p className="text-sm font-medium text-stone-300">{summary.aiReadyProfiles}</p>
               </div>
             </div>
-          );
-        })}
-
-        {profiles.length === 0 && (
-          <div className="flex flex-col items-center rounded-2xl border border-dashed border-stone-700/50 bg-stone-800/30 py-16 text-center">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-stone-800/50">
-              <User size={24} className="text-stone-600" />
-            </div>
-            <h2 className="mb-1 text-lg font-bold text-white">No profiles yet</h2>
-            <p className="mx-auto max-w-[260px] text-sm text-stone-500">
-              Create a profile to start tracking preferences for your household.
-            </p>
           </div>
-        )}
+
+          <div className="rounded-lg border border-stone-800 bg-stone-900/30 p-5">
+            <h3 className="mb-4 text-sm font-medium text-white">Guide</h3>
+            <div className="space-y-3 text-sm text-stone-500">
+              <p>Each profile can use one watch-history source at a time (Trakt or SIMKL).</p>
+              <p>OpenRouter keys live per profile so one person can use AI without changing everyone else.</p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <Modal
@@ -302,60 +416,53 @@ export default function ProfileList() {
       >
         {serviceModalProfile && (
           <div className="space-y-4">
-            <p className="text-sm text-stone-300">
-              Connect Trakt or SIMKL for this exact profile. Crispy tv now uses a dedicated auth route instead of sending profile links through onboarding.
+            <p className="text-sm text-stone-400">
+              Choose the service this profile should use for watch history sync. You can reconnect or switch later.
             </p>
 
             <div className="space-y-3">
-              <div className="rounded-2xl border border-stone-800 bg-stone-950/70 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-white">Trakt</p>
-                    <p className="mt-1 text-xs leading-5 text-stone-400">
-                      Use Trakt for watch history, lists, and profile-specific sync.
-                    </p>
-                  </div>
-                  <span
-                    className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
-                      profileStates[serviceModalProfile.id]?.traktConnected
-                        ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
-                        : 'border-stone-700 bg-stone-900 text-stone-400'
-                    }`}
-                  >
-                    {profileStates[serviceModalProfile.id]?.traktConnected ? 'Connected' : 'Not connected'}
-                  </span>
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <Button size="sm" onClick={() => handleConnectService(serviceModalProfile, 'trakt')}>
-                    {profileStates[serviceModalProfile.id]?.traktConnected ? 'Reconnect Trakt' : 'Connect Trakt'}
-                  </Button>
-                </div>
-              </div>
+              {(['trakt', 'simkl'] as const).map((provider) => {
+                const isConnected =
+                  provider === 'trakt'
+                    ? profileStates[serviceModalProfile.id]?.traktConnected
+                    : profileStates[serviceModalProfile.id]?.simklConnected;
 
-              <div className="rounded-2xl border border-stone-800 bg-stone-950/70 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-white">SIMKL</p>
-                    <p className="mt-1 text-xs leading-5 text-stone-400">
-                      Link a separate SIMKL account for this profile when you want a different sync source.
-                    </p>
+                return (
+                  <div key={provider} className="rounded-lg border border-stone-800 bg-stone-900/30 p-5">
+                    <div className="flex sm:items-start flex-col sm:flex-row justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-stone-800 bg-stone-950">
+                          <img src={serviceMeta[provider].logo} alt="" className="h-5 w-5" aria-hidden="true" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-white">{serviceMeta[provider].label}</p>
+                          <p className="mt-1 text-sm text-stone-500">{serviceMeta[provider].description}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center self-end sm:self-auto gap-2">
+                        <span
+                          className={`text-sm font-medium ${
+                            isConnected ? 'text-emerald-500' : 'text-stone-500'
+                          }`}
+                        >
+                          {isConnected ? 'Connected' : 'Disconnected'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex justify-end">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleConnectService(serviceModalProfile, provider)}
+                      >
+                        {isConnected ? `Reconnect ${serviceMeta[provider].label}` : `Connect ${serviceMeta[provider].label}`}
+                      </Button>
+                    </div>
                   </div>
-                  <span
-                    className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
-                      profileStates[serviceModalProfile.id]?.simklConnected
-                        ? 'border-sky-500/20 bg-sky-500/10 text-sky-200'
-                        : 'border-stone-700 bg-stone-900 text-stone-400'
-                    }`}
-                  >
-                    {profileStates[serviceModalProfile.id]?.simklConnected ? 'Connected' : 'Not connected'}
-                  </span>
-                </div>
-                <div className="mt-4 flex justify-end">
-                  <Button size="sm" onClick={() => handleConnectService(serviceModalProfile, 'simkl')}>
-                    {profileStates[serviceModalProfile.id]?.simklConnected ? 'Reconnect SIMKL' : 'Connect SIMKL'}
-                  </Button>
-                </div>
-              </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -365,18 +472,17 @@ export default function ProfileList() {
         isOpen={!!profileToDelete}
         onClose={() => setProfileToDelete(null)}
         title="Delete Profile"
-        className="max-w-sm"
       >
-        <div className="space-y-4">
+        <div className="space-y-4 text-sm">
           <p className="text-stone-300">
-            Are you sure you want to delete <strong>{profileToDelete?.name}</strong>? This action cannot be undone.
+            Are you sure you want to delete <span className="font-medium text-white">{profileToDelete?.name}</span>? This action cannot be undone.
           </p>
-          <div className="flex flex-col justify-end gap-3 md:flex-row">
-            <Button variant="ghost" className="w-full md:w-auto" onClick={() => setProfileToDelete(null)}>
+          <div className="mt-6 flex justify-end gap-3">
+            <Button variant="ghost" onClick={() => setProfileToDelete(null)}>
               Cancel
             </Button>
-            <Button variant="danger" className="w-full md:w-auto" onClick={handleDelete} isLoading={isDeleting}>
-              Delete Profile
+            <Button variant="danger" onClick={handleDelete} isLoading={isDeleting}>
+              Delete profile
             </Button>
           </div>
         </div>

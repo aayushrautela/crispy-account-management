@@ -50,7 +50,7 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/70 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 transition-opacity"
       onClick={onClose}
     >
       <div
@@ -60,19 +60,19 @@ export const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, 
         aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
         className={cn(
-          'relative w-full max-w-md rounded-2xl border border-stone-800/50 bg-stone-900 shadow-2xl animate-in zoom-in-95 duration-200',
+          'relative w-full max-w-md rounded-lg border border-stone-800 bg-stone-950 p-0 shadow-2xl',
           className,
         )}
       >
-        <div className="flex items-center justify-between border-b border-stone-800/50 p-4">
-          <h2 id={titleId} className="text-lg font-semibold text-white">
+        <div className="flex items-center justify-between border-b border-stone-900 p-6">
+          <h2 id={titleId} className="text-base font-bold text-white">
             {title}
           </h2>
-          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close modal">
-            <X className="h-5 w-5" />
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close modal" className="h-8 w-8 p-0">
+            <X className="h-4 w-4" />
           </Button>
         </div>
-        <div className="p-4">{children}</div>
+        <div className="p-6">{children}</div>
       </div>
     </div>
   );

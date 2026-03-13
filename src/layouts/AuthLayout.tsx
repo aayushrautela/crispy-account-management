@@ -7,6 +7,7 @@ export default function AuthLayout() {
   const { user, status, onboardingStatus, error, clearError, initialize } = useAuthStore();
   const location = useLocation();
   const isSignupRoute = location.pathname === '/auth/signup';
+  const isLoginRoute = location.pathname === '/auth/login';
   const isOnboardingRoute = location.pathname === '/auth/onboarding';
   const isProviderRoute = location.pathname.startsWith('/auth/connect/');
 
@@ -28,10 +29,10 @@ export default function AuthLayout() {
 
   if (status === 'error') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-stone-900 p-4 text-white">
-        <div className="w-full max-w-md space-y-4 rounded-2xl border border-stone-700 bg-stone-800 p-6">
+      <div className="flex min-h-screen items-center justify-center bg-stone-950 p-4 text-white">
+        <div className="w-full max-w-md space-y-6 rounded-lg border border-white/5 bg-stone-900 p-8 shadow-xl">
           <h1 className="text-xl font-semibold">Unable to load auth state</h1>
-          <p className="text-sm text-stone-300">{error ?? 'Please retry to continue.'}</p>
+          <p className="text-sm text-stone-400">{error ?? 'Please retry to continue'}</p>
           <div className="flex gap-3">
             <Button
               variant="secondary"
@@ -48,49 +49,38 @@ export default function AuthLayout() {
     );
   }
 
+  const shouldUseSplitLayout = isSignupRoute || isLoginRoute;
+
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden bg-stone-950 text-white selection:bg-white/10">
-      {/* Background Layer */}
-      <div
-        className="fixed inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000"
-        style={{ backgroundImage: 'url(/auth-signup-backdrop.jpg)' }}
-      />
-      <div className="fixed inset-0 bg-gradient-to-tr from-stone-950 via-stone-950/80 to-stone-900/40" />
-      <div className="fixed inset-0 backdrop-blur-[2px]" />
+    <div className="relative flex min-h-screen flex-col bg-stone-950 text-white">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: 'url("/auth-signup-backdrop.jpg")' }}
+      >
+        <div className="absolute inset-0 bg-stone-950/70" />
+      </div>
 
       <div className="relative z-10 flex min-h-screen flex-col">
         {/* Header */}
-        <header className="px-6 py-8 sm:px-10 lg:px-12">
-          <img src={logoWordmark} alt="Crispy tv" className="h-10 w-auto sm:h-12" />
+        <header className="px-6 py-6 sm:px-10 lg:px-12">
+          <img src={logoWordmark} alt="Crispy tv" className="h-10 w-auto" />
         </header>
 
         {/* Content */}
-        <main className="flex flex-1 items-center px-6 pb-12 sm:px-10 lg:px-12">
+        <main className="flex flex-1 items-center px-6 pb-32 sm:px-10 lg:px-12">
           <div className="mx-auto w-full max-w-7xl">
-            {isSignupRoute ? (
+            {shouldUseSplitLayout ? (
               <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-24">
-                <div className="max-w-2xl space-y-6 lg:space-y-8">
-                  <div className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-stone-400">
-                    Streaming companion
-                  </div>
-                  <div className="space-y-4 lg:space-y-6">
-                    <h1 className="text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-7xl lg:leading-[1.1]">
+                <div className="max-w-2xl space-y-6">
+                  <div className="space-y-4">
+                    <h1 className="text-3xl font-bold text-white sm:text-4xl lg:text-5xl lg:leading-[1.1]">
                       Bring your lists and AI setup together.
                     </h1>
-                    <p className="max-w-lg text-lg leading-relaxed text-stone-300 sm:text-xl">
+                    <p className="max-w-lg text-base leading-relaxed text-stone-300">
                       Create your Crispy tv account, pick Trakt or SIMKL, then add an OpenRouter key if you want AI-powered
                       recommendations.
                     </p>
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    {['Trakt or SIMKL', 'Optional OpenRouter', 'Start watching faster'].map((tag) => (
-                      <span
-                        key={tag}
-                        className="rounded-full border border-white/5 bg-white/5 px-4 py-1.5 text-sm font-medium text-stone-300 backdrop-blur-md"
-                      >
-                        {tag}
-                      </span>
-                    ))}
                   </div>
                 </div>
 

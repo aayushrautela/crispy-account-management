@@ -152,6 +152,15 @@ function hasProviderToken(value: unknown): boolean {
   return typeof accessToken === 'string' && accessToken.length > 0;
 }
 
+function hasOpenRouterKey(value: unknown): boolean {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  const apiKey = value['ai.openrouter_key'];
+  return typeof apiKey === 'string' && apiKey.trim().length > 0;
+}
+
 /**
  * Convert a ProviderAuthPayload into a flat Record<string, string>
  * that satisfies the is_string_map() CHECK constraint on profile_data columns.
@@ -201,7 +210,7 @@ function buildOnboardingState(profileId: string | null, row: ProfileDataRow | nu
     connectedService,
     traktConnected,
     simklConnected,
-    openRouterConfigured: Boolean(settings.openRouter?.configuredAt),
+    openRouterConfigured: Boolean(settings.openRouter?.configuredAt) || hasOpenRouterKey(row?.settings),
   };
 }
 

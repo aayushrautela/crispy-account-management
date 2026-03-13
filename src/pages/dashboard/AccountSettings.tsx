@@ -117,22 +117,24 @@ export default function AccountSettings() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-white">Account Settings</h1>
-        <p className="mt-0.5 text-sm text-stone-500">Manage authentication and security for your account.</p>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-stone-800 pb-5">
+        <div className="space-y-1">
+          <h1 className="text-xl font-medium text-white">Account Settings</h1>
+          <p className="text-sm text-stone-500">Manage authentication and security for your account.</p>
+        </div>
       </div>
 
-      <Card className="p-6">
-        <div className="mb-6 flex items-center gap-4">
-          <Mail className="h-7 w-7 text-amber-500" />
+      <Card className="p-0 border-none bg-transparent">
+        <div className="mb-4 flex items-center gap-3">
+          <Mail className="h-5 w-5 text-stone-500" />
           <div>
-            <h2 className="text-lg font-bold text-white">Email</h2>
+            <h2 className="text-sm font-medium text-white">Email</h2>
             <p className="text-xs text-stone-500">Update your login email address</p>
           </div>
         </div>
 
-        <form onSubmit={handleUpdateEmail} className="space-y-4 border-t border-stone-800/50 pt-4">
+        <form onSubmit={handleUpdateEmail} className="space-y-4 rounded-lg border border-stone-800 bg-stone-900/30 p-5">
           <Input
             id="new-email"
             name="newEmail"
@@ -170,16 +172,16 @@ export default function AccountSettings() {
         </form>
       </Card>
 
-      <Card className="p-6">
-        <div className="mb-6 flex items-center gap-4">
-          <Key className="h-7 w-7 text-amber-500" />
+      <Card className="p-0 border-none bg-transparent">
+        <div className="mb-4 flex items-center gap-3">
+          <Key className="h-5 w-5 text-stone-500" />
           <div>
-            <h2 className="text-lg font-bold text-white">Security</h2>
+            <h2 className="text-sm font-medium text-white">Security</h2>
             <p className="text-xs text-stone-500">Rotate your password</p>
           </div>
         </div>
 
-        <form onSubmit={handleUpdatePassword} className="space-y-4 border-t border-stone-800/50 pt-4">
+        <form onSubmit={handleUpdatePassword} className="space-y-4 rounded-lg border border-stone-800 bg-stone-900/30 p-5">
           <Input
             id="new-password"
             name="newPassword"
@@ -230,16 +232,16 @@ export default function AccountSettings() {
         </form>
       </Card>
 
-      <Card className="p-6">
-        <div className="mb-6 flex items-center gap-4">
-          <AlertTriangle className="h-7 w-7 text-red-500" />
+      <Card className="p-0 border-none bg-transparent">
+        <div className="mb-4 flex items-center gap-3">
+          <AlertTriangle className="h-5 w-5 text-red-500" />
           <div>
-            <h2 className="text-lg font-bold text-white">Danger Zone</h2>
+            <h2 className="text-sm font-medium text-white">Danger Zone</h2>
             <p className="text-xs text-stone-500">Permanent account actions</p>
           </div>
         </div>
 
-        <div className="space-y-4 border-t border-stone-800/50 py-4">
+        <div className="space-y-4 rounded-lg border border-red-500/20 bg-red-500/5 p-5">
           <p className="text-sm text-stone-300">
             Deleting your account removes your login and household access. If you are the last owner,
             the household and related profile data are deleted too.

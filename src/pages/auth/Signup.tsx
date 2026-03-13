@@ -45,10 +45,9 @@ export default function Signup() {
 
   if (emailVerificationPending) {
     return (
-      <div className="w-full space-y-8 rounded-[32px] border border-white/10 bg-stone-950/40 p-8 shadow-[0_32px_96px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:p-10">
+      <div className="w-full space-y-8 rounded-lg border border-white/5 bg-stone-900 p-8 shadow-xl sm:p-10">
         <div className="space-y-3 text-center sm:text-left">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-stone-400">One more step</p>
-          <h1 className="text-3xl font-bold tracking-tight text-white">Check your inbox</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-white">Check your inbox</h1>
           <p className="text-sm leading-relaxed text-stone-400">
             We sent a confirmation link to <span className="font-semibold text-stone-200">{formData.email}</span>. Please verify your email to continue.
           </p>
@@ -57,7 +56,7 @@ export default function Signup() {
         <div className="flex flex-col gap-3">
           <Link
             to="/auth/login"
-            className="flex h-12 items-center justify-center rounded-2xl bg-white font-bold text-stone-950 transition hover:bg-stone-100"
+            className="flex h-10 items-center justify-center rounded-lg bg-[#2b6cee] font-semibold text-white transition hover:bg-[#3e7bff]"
           >
             Go to Sign In
           </Link>
@@ -74,11 +73,10 @@ export default function Signup() {
   }
 
   return (
-    <div className="w-full space-y-8 rounded-[32px] border border-white/10 bg-stone-950/40 p-8 shadow-[0_32px_96px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:p-10">
+    <div className="w-full space-y-8 rounded-lg border border-white/5 bg-stone-900 p-8 shadow-sm sm:p-10">
       <div className="space-y-2 text-center sm:text-left">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-stone-400">Get Started</p>
-        <h1 className="text-3xl font-bold tracking-tight text-white">Create Account</h1>
-        <p className="text-sm leading-relaxed text-stone-400">Start your journey with Crispy tv in just a few seconds.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-white">Create Account</h1>
+        <p className="text-sm leading-relaxed text-stone-400">Sign up for an account to get started.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -91,7 +89,6 @@ export default function Signup() {
           placeholder="you@example.com"
           value={formData.email}
           onChange={(event) => setFormData((current) => ({ ...current, email: event.target.value }))}
-          className="h-12 rounded-2xl border-white/10 bg-stone-900/50 text-white placeholder:text-stone-500 focus:border-white focus:ring-white/20"
           required
         />
         <Input
@@ -103,7 +100,6 @@ export default function Signup() {
           placeholder="At least 8 characters"
           value={formData.password}
           onChange={(event) => setFormData((current) => ({ ...current, password: event.target.value }))}
-          className="h-12 rounded-2xl border-white/10 bg-stone-900/50 text-white placeholder:text-stone-500 focus:border-white focus:ring-white/20"
           minLength={8}
           required
         />
@@ -116,20 +112,19 @@ export default function Signup() {
           placeholder="Repeat your password"
           value={formData.confirmPassword}
           onChange={(event) => setFormData((current) => ({ ...current, confirmPassword: event.target.value }))}
-          className="h-12 rounded-2xl border-white/10 bg-stone-900/50 text-white placeholder:text-stone-500 focus:border-white focus:ring-white/20"
           minLength={8}
           required
         />
 
         {error && (
-          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">
+          <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">
             {error}
           </div>
         )}
 
         <Button
           type="submit"
-          className="h-12 w-full rounded-2xl bg-white font-bold text-stone-950 transition-all hover:scale-[1.02] hover:bg-stone-100 active:scale-[0.98]"
+          className="w-full font-semibold"
           isLoading={loading}
         >
           Create Account

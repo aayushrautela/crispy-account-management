@@ -102,27 +102,27 @@ function AddonRow({ addon, busy, onToggle, onRemove }: AddonRowProps) {
   return (
     <div
       className={cn(
-        'flex items-center justify-between gap-4 rounded-xl border border-stone-700 bg-stone-800/40 p-3 transition-opacity',
+        'flex items-center justify-between gap-4 border-b border-stone-800/50 py-4 transition-opacity last:border-0',
         !addon.enabled && 'opacity-60',
       )}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-4">
         {iconUrl ? (
           <img
             src={iconUrl}
             alt={title}
-            className="h-10 w-10 rounded-md object-cover"
+            className="h-10 w-10 rounded object-cover"
             onError={() => setUseFallbackIcon(true)}
           />
         ) : (
-          <div className="flex h-10 w-10 items-center justify-center text-stone-500">
+          <div className="flex h-10 w-10 items-center justify-center rounded border border-stone-800 bg-stone-900/50 text-stone-500">
             {failed ? <AlertCircle className="h-4 w-4 text-amber-400" /> : <Puzzle className="h-4 w-4" />}
           </div>
         )}
 
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-white">{title}</div>
-          <div className="truncate text-xs text-stone-400">{subtitle}</div>
+          <div className="truncate text-sm font-medium text-white">{title}</div>
+          <div className="truncate text-sm text-stone-500">{subtitle}</div>
         </div>
       </div>
 
@@ -260,14 +260,16 @@ export default function Addons() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-white">Addons</h1>
-        <p className="mt-0.5 text-sm text-stone-500">Install and manage household addons.</p>
+    <div className="mx-auto max-w-5xl space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-stone-800 pb-5">
+        <div className="space-y-1">
+          <h1 className="text-xl font-medium text-white">Addons</h1>
+          <p className="text-sm text-stone-500">Install and manage household addons.</p>
+        </div>
       </div>
 
-      <Card className="p-6">
-        <form onSubmit={handleAdd} className="space-y-4">
+      <Card className="p-0 border-none bg-transparent">
+        <form onSubmit={handleAdd} className="space-y-4 rounded-lg border border-stone-800 bg-stone-900/30 p-5">
           <Input
             id="addon-url"
             label="Addon manifest URL"
@@ -278,9 +280,9 @@ export default function Addons() {
           />
 
           <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-stone-500">Supports `https://` and `stremio://` links.</p>
-            <Button type="submit" isLoading={adding} disabled={!newAddonUrl.trim()}>
-              <Plus className="mr-1 h-4 w-4" />
+            <p className="text-sm text-stone-500">Supports `https://` and `stremio://` links.</p>
+            <Button type="submit" size="sm" isLoading={adding} disabled={!newAddonUrl.trim()}>
+              <Plus className="mr-1.5 h-4 w-4" />
               Add addon
             </Button>
           </div>
@@ -299,21 +301,23 @@ export default function Addons() {
           </div>
         )}
 
-        <div className="mt-6 border-t border-stone-800/70 pt-6">
+        <div className="mt-6">
           {loading ? (
-            <div className="space-y-3">
+            <div className="space-y-0 divide-y divide-stone-800/50 rounded-lg border border-stone-800 bg-stone-900/30">
               {[1, 2].map((item) => (
-                <div key={item} className="h-16 animate-pulse rounded-xl border border-stone-700 bg-stone-800/30" />
+                <div key={item} className="h-20 animate-pulse p-4" />
               ))}
             </div>
           ) : addons.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-stone-700 bg-stone-900/30 py-10 text-center">
-              <Puzzle className="mx-auto h-7 w-7 text-stone-500" />
-              <p className="mt-3 text-sm font-medium text-stone-300">No addons installed</p>
-              <p className="mt-1 text-xs text-stone-500">Add a manifest URL above to get started.</p>
+            <div className="rounded-lg border border-stone-800 bg-stone-900/30 py-10 text-center">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg border border-stone-800 bg-stone-950">
+                <Puzzle className="h-5 w-5 text-stone-500" />
+              </div>
+              <h2 className="mt-4 text-sm font-medium text-white">No addons installed</h2>
+              <p className="mt-2 text-sm text-stone-500">Add a manifest URL above to get started.</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="rounded-lg border border-stone-800 bg-stone-900/30 px-5">
               {addons.map((addon) => (
                 <AddonRow
                   key={addon.url}

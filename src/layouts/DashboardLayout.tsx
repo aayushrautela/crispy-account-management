@@ -4,7 +4,7 @@ import { LogOut, Menu, Puzzle, Settings, Smartphone, User } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
-import logo from '../assets/logo.svg';
+import logoWordmark from '../assets/logo-wordmark.svg';
 
 interface NavItem {
   name: string;
@@ -15,30 +15,36 @@ interface NavItem {
 const navItems: NavItem[] = [
   { name: 'Profiles', href: '/dashboard', icon: User },
   { name: 'Account', href: '/dashboard/account', icon: Settings },
-  { name: 'Addons', href: '/dashboard/addons', icon: Puzzle },
-  { name: 'Get the app', href: '/dashboard/downloads', icon: Smartphone },
+  { name: 'Add-ons', href: '/dashboard/addons', icon: Puzzle },
+  { name: 'Downloads', href: '/dashboard/downloads', icon: Smartphone },
 ];
 
 interface SidebarContentProps {
   pathname: string;
+  userEmail: string | undefined;
   onNavigate?: () => void;
   onSignOut: () => Promise<void>;
   signingOut: boolean;
 }
 
-function SidebarContent({ pathname, onNavigate, onSignOut, signingOut }: SidebarContentProps) {
+function isNavItemActive(pathname: string, href: string): boolean {
+  if (href === '/dashboard') {
+    return pathname === href;
+  }
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function SidebarContent({ pathname, userEmail, onNavigate, onSignOut, signingOut }: SidebarContentProps) {
   return (
     <>
-      <div className="p-6">
-        <div className="flex items-center gap-3">
-          <img src={logo} alt="Crispy tv" className="h-10 w-10" />
-          <span className="text-2xl font-black tracking-tight text-white">Crispy tv</span>
-        </div>
+      <div className="border-b border-white/5 px-6 py-6">
+        <img src={logoWordmark} alt="Crispy tv" className="h-7 w-auto" />
       </div>
 
-      <nav className="flex-1 space-y-1 px-4">
+      <nav className="flex-1 space-y-2 px-4 py-5">
         {navItems.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = isNavItemActive(pathname, item.href);
 
           return (
             <Link
@@ -46,30 +52,41 @@ function SidebarContent({ pathname, onNavigate, onSignOut, signingOut }: Sidebar
               to={item.href}
               onClick={onNavigate}
               className={cn(
-                'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all',
+                'flex items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors',
                 isActive
-                  ? 'bg-amber-500/10 text-amber-500 shadow-sm shadow-amber-500/10'
-                  : 'text-stone-400 hover:bg-stone-800 hover:text-stone-100',
+                  ? 'bg-white/10 text-white'
+                  : 'text-stone-400 hover:bg-white/5 hover:text-white',
               )}
             >
-              <item.icon className={cn('h-5 w-5', isActive ? 'text-amber-500' : 'text-stone-500')} />
+              <item.icon className={cn('h-5 w-5', isActive ? 'text-[#72a1ff]' : 'text-stone-500')} />
               {item.name}
             </Link>
           );
         })}
       </nav>
 
-      <div className="border-t border-stone-700/70 p-4">
+      <div className="border-t border-white/5 p-4">
+        <div className="mb-4 p-2">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-sm font-semibold text-white">
+              {userEmail?.charAt(0).toUpperCase() || 'A'}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xs text-stone-400">{userEmail ?? 'Signed in'}</p>
+            </div>
+          </div>
+        </div>
+
         <Button
-          variant="danger"
+          variant="secondary"
           onClick={() => {
             void onSignOut();
           }}
           isLoading={signingOut}
-          className="w-full"
+          className="w-full justify-center"
         >
           <LogOut className="mr-2 h-4 w-4" />
-          Sign Out
+          Sign out
         </Button>
       </div>
     </>
@@ -84,19 +101,19 @@ export default function DashboardLayout() {
 
   if (status === 'booting') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-stone-900 text-white">
-        <div className="h-8 w-8 animate-spin rounded-full border-t-2 border-white" />
+      <div className="flex min-h-screen items-center justify-center bg-stone-950 text-white">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/10 border-t-white" />
       </div>
     );
   }
 
   if (status === 'error') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-stone-900 p-4 text-white">
-        <div className="w-full max-w-md rounded-2xl border border-stone-700 bg-stone-800 p-6">
-          <h1 className="text-xl font-semibold">Unable to load account</h1>
-          <p className="mt-2 text-sm text-stone-300">{error ?? 'Try again to continue.'}</p>
-          <div className="mt-4 flex gap-3">
+      <div className="flex min-h-screen items-center justify-center bg-stone-950 p-4 text-white">
+        <div className="w-full max-w-md rounded-lg border border-white/5 bg-stone-900 p-6 shadow-xl">
+          <h1 className="text-xl font-semibold text-white">Unable to load account</h1>
+          <p className="mt-2 text-sm text-stone-400">{error ?? 'Try again to continue'}</p>
+          <div className="mt-6 flex gap-3">
             <Button
               variant="secondary"
               onClick={() => {
@@ -118,7 +135,7 @@ export default function DashboardLayout() {
 
   if (!householdId) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-stone-900 text-sm text-stone-300">
+      <div className="flex min-h-screen items-center justify-center bg-[#090b10] text-sm text-stone-300">
         Resolving household context...
       </div>
     );
@@ -126,7 +143,7 @@ export default function DashboardLayout() {
 
   if (onboardingStatus === 'unknown') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-stone-900 text-sm text-stone-300">
+      <div className="flex min-h-screen items-center justify-center bg-[#090b10] text-sm text-stone-300">
         Checking your setup...
       </div>
     );
@@ -136,6 +153,8 @@ export default function DashboardLayout() {
     return <Navigate to="/auth/onboarding" replace />;
   }
 
+  const currentNavItem = navItems.find((item) => isNavItemActive(location.pathname, item.href));
+
   const handleSignOut = async (): Promise<void> => {
     setSigningOut(true);
     await signOut();
@@ -143,57 +162,61 @@ export default function DashboardLayout() {
   };
 
   return (
-    <div className="flex min-h-screen bg-stone-900 text-stone-50">
-      <aside className="sticky top-0 hidden h-screen w-64 flex-col border-r border-stone-700 bg-stone-800 md:flex">
+    <div className="flex min-h-screen bg-[#090b10] text-stone-50">
+      <aside className="sticky top-0 hidden h-screen w-60 flex-col border-r border-white/5 bg-stone-900 md:flex">
         <SidebarContent
           pathname={location.pathname}
+          userEmail={user.email}
           onSignOut={handleSignOut}
           signingOut={signingOut}
         />
       </aside>
 
       {isMobileMenuOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
+        <div className="fixed inset-0 z-40 bg-black/60 md:hidden" onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-stone-700 bg-stone-800 transition-transform duration-300 ease-in-out md:hidden',
+          'fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-white/5 bg-stone-900 transition-transform duration-300 ease-in-out md:hidden',
           isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full',
         )}
       >
         <SidebarContent
           pathname={location.pathname}
+          userEmail={user.email}
           onNavigate={() => setIsMobileMenuOpen(false)}
           onSignOut={handleSignOut}
           signingOut={signingOut}
         />
       </aside>
 
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-stone-900">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-stone-800 bg-stone-900/80 px-6 backdrop-blur-md md:px-8">
-          <button
-            aria-label="Open navigation"
-            className="-ml-2 p-2 text-stone-400 transition-colors hover:text-stone-100 md:hidden"
-            onClick={() => setIsMobileMenuOpen(true)}
-          >
-            <Menu className="h-6 w-6" />
-          </button>
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-stone-950">
+        <header className="sticky top-0 z-30 border-b border-white/5 bg-stone-950/80 px-5 py-4 backdrop-blur-md md:px-8">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <button
+                aria-label="Open navigation"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/8 bg-white/[0.03] text-stone-300 transition-colors hover:bg-white/[0.08] hover:text-white md:hidden"
+                onClick={() => setIsMobileMenuOpen(true)}
+              >
+                <Menu className="h-5 w-5" />
+              </button>
 
-          <div className="flex-1 md:flex-none" />
+              <div>
+                <h1 className="text-sm font-semibold text-white md:text-base">{currentNavItem?.name ?? 'Dashboard'}</h1>
+              </div>
+            </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-stone-700 bg-stone-800 text-xs font-bold text-stone-300">
-              {user.email?.charAt(0).toUpperCase() || 'A'}
+            <div className="min-w-0 rounded-full border border-white/8 bg-white/[0.03] px-3 py-2 text-xs text-stone-300">
+              <span className="hidden md:inline">Signed in as </span>
+              <span className="font-medium text-white">{user.email}</span>
             </div>
           </div>
         </header>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-4xl p-4 md:p-10">
+          <div className="mx-auto w-full max-w-7xl p-4 md:p-8 xl:p-10">
             <Outlet />
           </div>
         </div>
