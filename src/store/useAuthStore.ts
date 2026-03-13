@@ -7,7 +7,7 @@ import { StorageService } from '../lib/storage';
 import { toErrorMessage } from '../lib/errors';
 import type { HouseholdRole } from '../types';
 
-export type AuthStatus = 'booting' | 'authenticated' | 'anonymous' | 'error';
+export type AuthStatus = 'authenticated' | 'anonymous' | 'error';
 
 interface AuthState {
   session: Session | null;
@@ -19,7 +19,10 @@ interface AuthState {
   selectedSyncService: SyncService | null;
   connectedSyncService: SyncService | null;
   status: AuthStatus;
-  loading: boolean;
+  hasInitialized: boolean;
+  isInitializing: boolean;
+  isRefreshingMembership: boolean;
+  isRefreshingOnboarding: boolean;
   error: string | null;
   initialize: () => Promise<void>;
   refreshMembership: () => Promise<void>;
@@ -37,16 +40,19 @@ export const useAuthStore = create<AuthState>((set, get) => {
     StorageService.clearAllSessionScope();
     set({
       session: null,
-        user: null,
-        householdId: null,
-        membershipRole: null,
-        onboardingStatus: 'unknown',
-        onboardingProfileId: null,
-        selectedSyncService: null,
-        connectedSyncService: null,
-        status: 'anonymous',
-        loading: false,
-        error: null,
+      user: null,
+      householdId: null,
+      membershipRole: null,
+      onboardingStatus: 'unknown',
+      onboardingProfileId: null,
+      selectedSyncService: null,
+      connectedSyncService: null,
+      status: 'anonymous',
+      hasInitialized: true,
+      isInitializing: false,
+      isRefreshingMembership: false,
+      isRefreshingOnboarding: false,
+      error: null,
     });
   };
 
@@ -83,7 +89,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
         selectedSyncService: onboarding.selectedService,
         connectedSyncService: onboarding.connectedService,
         status: 'authenticated',
-        loading: false,
+        hasInitialized: true,
+        isInitializing: false,
+        isRefreshingMembership: false,
+        isRefreshingOnboarding: false,
         error: null,
       });
     } catch (error) {
@@ -101,7 +110,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
         selectedSyncService: null,
         connectedSyncService: null,
         status: 'error',
-        loading: false,
+        hasInitialized: true,
+        isInitializing: false,
+        isRefreshingMembership: false,
+        isRefreshingOnboarding: false,
         error: toErrorMessage(error, 'Unable to initialize account membership.'),
       });
     }
@@ -112,7 +124,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       return initializePromise;
     }
 
-    set({ status: 'booting', loading: true, error: null });
+    set({ isInitializing: true, error: null });
 
     initializePromise = (async () => {
       try {
@@ -129,6 +141,13 @@ export const useAuthStore = create<AuthState>((set, get) => {
 
         if (!authSubscription) {
           const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+            const currentUserId = get().user?.id ?? null;
+            const nextUserId = nextSession?.user?.id ?? null;
+
+            if (nextUserId && nextUserId !== currentUserId) {
+              set({ isInitializing: true, error: null });
+            }
+
             void syncSession(nextSession);
           });
 
@@ -137,7 +156,10 @@ export const useAuthStore = create<AuthState>((set, get) => {
       } catch (error) {
         set({
           status: 'error',
-          loading: false,
+          hasInitialized: true,
+          isInitializing: false,
+          isRefreshingMembership: false,
+          isRefreshingOnboarding: false,
           error: toErrorMessage(error, 'Unable to initialize auth session.'),
         });
       } finally {
@@ -156,7 +178,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       return;
     }
 
-    set({ loading: true, status: 'booting', error: null });
+    set({ isRefreshingMembership: true, error: null });
     await syncSession(session);
   };
 
@@ -169,7 +191,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
     }
 
     try {
-      set({ loading: true, onboardingStatus: 'unknown', error: null });
+      set({ isRefreshingOnboarding: true, error: null });
       const onboarding = await getOnboardingState({
         householdId,
         userId: user.id,
@@ -180,12 +202,15 @@ export const useAuthStore = create<AuthState>((set, get) => {
         onboardingProfileId: onboarding.profileId,
         selectedSyncService: onboarding.selectedService,
         connectedSyncService: onboarding.connectedService,
-        loading: false,
+        isRefreshingOnboarding: false,
       });
     } catch (error) {
       set({
         status: 'error',
-        loading: false,
+        hasInitialized: true,
+        isInitializing: false,
+        isRefreshingMembership: false,
+        isRefreshingOnboarding: false,
         error: toErrorMessage(error, 'Unable to refresh onboarding status.'),
       });
     }
@@ -200,8 +225,11 @@ export const useAuthStore = create<AuthState>((set, get) => {
     onboardingProfileId: null,
     selectedSyncService: null,
     connectedSyncService: null,
-    status: 'booting',
-    loading: true,
+    status: 'anonymous',
+    hasInitialized: false,
+    isInitializing: true,
+    isRefreshingMembership: false,
+    isRefreshingOnboarding: false,
     error: null,
     initialize,
     refreshMembership,

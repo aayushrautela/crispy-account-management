@@ -1,21 +1,23 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import logoWordmark from '../assets/logo-wordmark.svg';
+import { AppBootScreen } from '../components/AppBootScreen';
 import { Button } from '../components/ui/Button';
 import { useAuthStore } from '../store/useAuthStore';
 
 export default function AuthLayout() {
-  const { user, status, onboardingStatus, error, clearError, initialize } = useAuthStore();
+  const { user, status, onboardingStatus, error, clearError, hasInitialized, initialize, isInitializing } = useAuthStore();
   const location = useLocation();
   const isSignupRoute = location.pathname === '/auth/signup';
   const isLoginRoute = location.pathname === '/auth/login';
   const isOnboardingRoute = location.pathname === '/auth/onboarding';
   const isProviderRoute = location.pathname.startsWith('/auth/connect/');
 
-  if (status === 'booting') {
+  if (!hasInitialized || isInitializing) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-stone-900 text-white">
-        <div className="h-8 w-8 animate-spin rounded-full border-t-2 border-white" />
-      </div>
+      <AppBootScreen
+        title="Checking your session"
+        message="We are restoring your access, account state, and the next step in your auth flow."
+      />
     );
   }
 

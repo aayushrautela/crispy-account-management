@@ -20,7 +20,7 @@ export function Button({
   ...props 
 }: ButtonProps) {
   const baseStyles =
-    'inline-flex items-center justify-center font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#090b10] disabled:pointer-events-none disabled:opacity-50';
+    'relative inline-flex items-center justify-center font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#090b10] disabled:pointer-events-none disabled:opacity-50';
   
   const variants = {
     primary: 'rounded-lg bg-stone-100 text-stone-900 hover:bg-stone-200 focus:ring-stone-500',
@@ -46,10 +46,13 @@ export function Button({
         className
       )}
       disabled={disabled || isLoading}
+      aria-busy={isLoading || undefined}
       {...props}
     >
-      {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-      {children}
+      {isLoading ? <Loader2 className="absolute h-4 w-4 animate-spin" /> : null}
+      <span className={cn('inline-flex items-center justify-center', isLoading && 'opacity-0')}>
+        {children}
+      </span>
     </button>
   );
 }

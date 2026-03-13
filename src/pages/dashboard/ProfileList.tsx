@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Plus, User, Users } from 'lucide-react';
+import { Plus, User, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { ProfileForm } from '../../components/ProfileForm';
+import { Skeleton } from '../../components/ui/Skeleton';
 import { useAuthStore } from '../../store/useAuthStore';
 import type { Profile } from '../../types';
 import { resolveAvatarUrl } from '../../lib/avatar';
@@ -89,13 +90,88 @@ function ServiceBadge({ service }: { service: SyncService | null }) {
   );
 }
 
+function ProfileRowSkeleton() {
+  return (
+    <div className="flex flex-col gap-5 rounded-lg border border-stone-800 bg-stone-900/30 p-5 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex items-center gap-4">
+        <Skeleton className="h-12 w-12 rounded-lg" />
+        <div className="min-w-0 space-y-2">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-4 w-28" />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4 border-t border-stone-800 pt-4 sm:flex-row sm:items-center sm:gap-8 lg:border-t-0 lg:pt-0">
+        <div className="flex items-center gap-6 sm:gap-8">
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-14" />
+            <Skeleton className="h-4 w-20" />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-8 w-24 rounded-lg" />
+          <Skeleton className="h-8 w-16 rounded-lg" />
+          <Skeleton className="h-8 w-20 rounded-lg" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProfileListSkeleton() {
+  return (
+    <div className="mx-auto max-w-5xl space-y-6" aria-hidden="true">
+      <div className="flex flex-col gap-4 border-b border-stone-800 pb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-7 w-52" />
+          <Skeleton className="h-4 w-80 max-w-full" />
+        </div>
+        <Skeleton className="h-9 w-28 rounded-lg" />
+      </div>
+
+      <div className="grid gap-8 lg:grid-cols-[1fr_280px]">
+        <div className="space-y-4">
+          <ProfileRowSkeleton />
+          <ProfileRowSkeleton />
+          <ProfileRowSkeleton />
+        </div>
+
+        <div className="space-y-6">
+          <div className="rounded-lg border border-stone-800 bg-stone-900/30 p-5">
+            <Skeleton className="mb-4 h-4 w-20" />
+            <div className="space-y-3">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-stone-800 bg-stone-900/30 p-5">
+            <Skeleton className="mb-4 h-4 w-16" />
+            <div className="space-y-3">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-11/12" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProfileList() {
   const navigate = useNavigate();
   const { user, householdId, status } = useAuthStore();
   const [profiles, setProfiles] = useState<ProfileRecord[]>([]);
   const [profileStates, setProfileStates] = useState<Record<string, OnboardingState>>({});
   const [primaryProfileId, setPrimaryProfileId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<ProfileRecord | null>(null);
@@ -105,16 +181,22 @@ export default function ProfileList() {
 
   const canManageProfiles = status === 'authenticated' && !!householdId && !!user;
 
-  const fetchProfiles = useCallback(async () => {
+  const fetchProfiles = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
     if (!canManageProfiles || !householdId) {
       setProfiles([]);
       setProfileStates({});
       setPrimaryProfileId(null);
-      setLoading(false);
+      setIsInitialLoading(false);
+      setIsRefreshing(false);
       return;
     }
 
-    setLoading(true);
+    if (mode === 'refresh') {
+      setIsRefreshing(true);
+    } else {
+      setIsInitialLoading(true);
+    }
+
     setError(null);
 
     try {
@@ -129,12 +211,13 @@ export default function ProfileList() {
       setProfileStates({});
       setError(mapSupabaseError(fetchError, 'Failed to load profiles.'));
     } finally {
-      setLoading(false);
+      setIsInitialLoading(false);
+      setIsRefreshing(false);
     }
   }, [canManageProfiles, householdId]);
 
   useEffect(() => {
-    void fetchProfiles();
+    void fetchProfiles('initial');
   }, [fetchProfiles]);
 
   const handleCreate = async (payload: { name: string; avatar: string | null }) => {
@@ -149,7 +232,7 @@ export default function ProfileList() {
       avatar: payload.avatar,
     });
 
-    await fetchProfiles();
+    await fetchProfiles('refresh');
     setIsModalOpen(false);
     setEditingProfile(null);
   };
@@ -166,7 +249,7 @@ export default function ProfileList() {
       avatar: payload.avatar,
     });
 
-    await fetchProfiles();
+    await fetchProfiles('refresh');
     setIsModalOpen(false);
     setEditingProfile(null);
   };
@@ -203,7 +286,7 @@ export default function ProfileList() {
         setServiceModalProfile(null);
       }
 
-      await fetchProfiles();
+      await fetchProfiles('refresh');
       setProfileToDelete(null);
     } catch (deleteError) {
       setError(mapSupabaseError(deleteError, 'Failed to delete profile.'));
@@ -224,25 +307,21 @@ export default function ProfileList() {
     };
   }, [profileStates, profiles]);
 
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-stone-400" />
-      </div>
-    );
+  if (isInitialLoading) {
+    return <ProfileListSkeleton />;
   }
 
   if (!canManageProfiles) {
     return (
       <div className="rounded-lg border border-stone-800 bg-stone-900/30 p-5 text-sm text-stone-400">
-        Account membership is still loading. Refresh the page if this persists.
+        We could not resolve your household profile access. Reload the page if this keeps happening.
       </div>
     );
   }
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-stone-800 pb-5">
+      <div className="flex flex-col gap-4 border-b border-stone-800 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-xl font-medium text-white">Profiles & connections</h1>
           <p className="text-sm text-stone-500">
@@ -250,16 +329,24 @@ export default function ProfileList() {
           </p>
         </div>
 
-        <Button
-          onClick={() => {
-            setEditingProfile(null);
-            setIsModalOpen(true);
-          }}
-          className="h-9 px-4 text-sm font-medium"
-        >
-          <Plus size={16} className="mr-1.5" />
-          Add profile
-        </Button>
+        <div className="flex items-center gap-3 self-start sm:self-auto">
+          {isRefreshing ? (
+            <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-medium text-stone-300">
+              Updating profiles...
+            </span>
+          ) : null}
+
+          <Button
+            onClick={() => {
+              setEditingProfile(null);
+              setIsModalOpen(true);
+            }}
+            className="h-9 px-4 text-sm font-medium"
+          >
+            <Plus size={16} className="mr-1.5" />
+            Add profile
+          </Button>
+        </div>
       </div>
 
       {error && (

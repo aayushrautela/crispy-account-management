@@ -78,11 +78,13 @@ export default function ProviderConnect() {
   const requiresOnboardingContext = !targetProfileId;
   const canFinalizeConnection = !requiresOnboardingContext || onboardingContext !== null;
 
-  latestConnectionStateRef.current = {
-    onboardingContext,
-    targetProfileId,
-    returnTo,
-  };
+  useEffect(() => {
+    latestConnectionStateRef.current = {
+      onboardingContext,
+      targetProfileId,
+      returnTo,
+    };
+  }, [onboardingContext, returnTo, targetProfileId]);
 
   const config = provider ? providerConfig[provider] : null;
   const backLabel = returnTo === '/dashboard' ? 'Back to profiles' : 'Back to onboarding';

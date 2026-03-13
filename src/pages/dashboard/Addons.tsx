@@ -3,6 +3,7 @@ import { AlertCircle, Plus, Puzzle, Trash2 } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
+import { Skeleton } from '../../components/ui/Skeleton';
 import {
   addAddon,
   getHouseholdAddons,
@@ -170,16 +171,40 @@ function AddonRow({ addon, busy, onToggle, onRemove }: AddonRowProps) {
   );
 }
 
+function AddonRowSkeleton() {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-stone-800/50 py-4 last:border-0" aria-hidden="true">
+      <div className="flex min-w-0 flex-1 items-center gap-4">
+        <Skeleton className="h-10 w-10 rounded" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <Skeleton className="h-4 w-40 max-w-full" />
+          <Skeleton className="h-4 w-full max-w-md" />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Skeleton className="h-7 w-12 rounded-full" />
+        <Skeleton className="h-8 w-8 rounded-lg" />
+      </div>
+    </div>
+  );
+}
+
 export default function Addons() {
   const [addons, setAddons] = useState<Addon[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [newAddonUrl, setNewAddonUrl] = useState('');
   const [message, setMessage] = useState<SectionMessage | null>(null);
   const [busyUrls, setBusyUrls] = useState<Set<string>>(new Set());
 
-  const loadAddons = useCallback(async () => {
-    setLoading(true);
+  const loadAddons = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
+    if (mode === 'refresh') {
+      setIsRefreshing(true);
+    } else {
+      setIsInitialLoading(true);
+    }
 
     try {
       const data = await getHouseholdAddons();
@@ -188,12 +213,13 @@ export default function Addons() {
       setMessage({ type: 'error', text: mapSupabaseError(error, 'Failed to load addons.') });
       setAddons([]);
     } finally {
-      setLoading(false);
+      setIsInitialLoading(false);
+      setIsRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadAddons();
+    void loadAddons('initial');
   }, [loadAddons]);
 
   const setBusy = (url: string, busy: boolean) => {
@@ -219,7 +245,7 @@ export default function Addons() {
 
     try {
       await addAddon(newAddonUrl);
-      await loadAddons();
+      await loadAddons('refresh');
       setNewAddonUrl('');
       setMessage({ type: 'success', text: 'Addon saved.' });
     } catch (error) {
@@ -261,11 +287,17 @@ export default function Addons() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-stone-800 pb-5">
+      <div className="flex flex-col gap-4 border-b border-stone-800 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-xl font-medium text-white">Addons</h1>
           <p className="text-sm text-stone-500">Install and manage household addons.</p>
         </div>
+
+        {isRefreshing ? (
+          <span className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-medium text-stone-300">
+            Syncing addons...
+          </span>
+        ) : null}
       </div>
 
       <Card className="p-0 border-none bg-transparent">
@@ -302,11 +334,13 @@ export default function Addons() {
         )}
 
         <div className="mt-6">
-          {loading ? (
+          {isInitialLoading ? (
             <div className="space-y-0 divide-y divide-stone-800/50 rounded-lg border border-stone-800 bg-stone-900/30">
-              {[1, 2].map((item) => (
-                <div key={item} className="h-20 animate-pulse p-4" />
-              ))}
+              <div className="px-5">
+                <AddonRowSkeleton />
+                <AddonRowSkeleton />
+                <AddonRowSkeleton />
+              </div>
             </div>
           ) : addons.length === 0 ? (
             <div className="rounded-lg border border-stone-800 bg-stone-900/30 py-10 text-center">

@@ -1,6 +1,7 @@
 import { useState, type ComponentType } from 'react';
 import { Link, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { LogOut, Menu, Puzzle, Settings, Smartphone, User } from 'lucide-react';
+import { AppBootScreen } from '../components/AppBootScreen';
 import { useAuthStore } from '../store/useAuthStore';
 import { cn } from '../lib/utils';
 import { Button } from '../components/ui/Button';
@@ -94,16 +95,29 @@ function SidebarContent({ pathname, userEmail, onNavigate, onSignOut, signingOut
 }
 
 export default function DashboardLayout() {
-  const { user, householdId, onboardingStatus, status, error, clearError, initialize, signOut } = useAuthStore();
+  const {
+    user,
+    householdId,
+    onboardingStatus,
+    status,
+    error,
+    clearError,
+    hasInitialized,
+    initialize,
+    isInitializing,
+    refreshOnboarding,
+    signOut,
+  } = useAuthStore();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
-  if (status === 'booting') {
+  if (!hasInitialized || isInitializing) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-stone-950 text-white">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/10 border-t-white" />
-      </div>
+      <AppBootScreen
+        title="Preparing your dashboard"
+        message="We are loading your household access, setup state, and dashboard shell in one pass."
+      />
     );
   }
 
@@ -135,16 +149,43 @@ export default function DashboardLayout() {
 
   if (!householdId) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#090b10] text-sm text-stone-300">
-        Resolving household context...
+      <div className="flex min-h-screen items-center justify-center bg-stone-950 p-4 text-white">
+        <div className="w-full max-w-md rounded-lg border border-white/5 bg-stone-900 p-6 shadow-xl">
+          <h1 className="text-xl font-semibold text-white">Unable to resolve household access</h1>
+          <p className="mt-2 text-sm text-stone-400">Your session loaded, but the household context did not finish syncing.</p>
+          <div className="mt-6 flex gap-3">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                clearError();
+                void initialize();
+              }}
+            >
+              Retry
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (onboardingStatus === 'unknown') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#090b10] text-sm text-stone-300">
-        Checking your setup...
+      <div className="flex min-h-screen items-center justify-center bg-stone-950 p-4 text-white">
+        <div className="w-full max-w-md rounded-lg border border-white/5 bg-stone-900 p-6 shadow-xl">
+          <h1 className="text-xl font-semibold text-white">Unable to confirm your setup</h1>
+          <p className="mt-2 text-sm text-stone-400">We could not finish checking onboarding state for this session.</p>
+          <div className="mt-6 flex gap-3">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                void refreshOnboarding();
+              }}
+            >
+              Retry
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }
