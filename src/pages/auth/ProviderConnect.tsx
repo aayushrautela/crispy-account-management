@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ExternalLink, Loader2, ShieldCheck } from 'lucide-react';
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import simklLogo from '../../assets/brands/simkl.svg';
 import traktLogo from '../../assets/brands/trakt.svg';
 import { Button } from '../../components/ui/Button';
@@ -9,11 +9,11 @@ import {
   beginSimklAuth,
   beginTraktAuth,
   clearPendingProviderAuth,
+  type CompletedProviderAuthResult,
   completeSimklAuthCallback,
   completeTraktAuthCallback,
   saveProviderAuth,
   saveProviderAuthForProfile,
-  type ProviderAuthPayload,
   type SyncService,
 } from '../../services/onboardingService';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -35,25 +35,24 @@ const providerConfig = {
   },
 } satisfies Record<SyncService, { name: string; logo: string; loadingTitle: string; loadingBody: string; errorMessage: string }>;
 
-const PROVIDER_CONNECT_LOG_PREFIX = '[provider-connect]';
-
-function logProviderConnect(event: string, details: Record<string, unknown> = {}, level: 'info' | 'warn' | 'error' = 'info') {
-  console[level](`${PROVIDER_CONNECT_LOG_PREFIX} ${event}`, details);
-}
-
 function normalizeReturnTo(value: string | null): string {
   return value && value.startsWith('/') ? value : '/auth/onboarding';
 }
 
+function buildFlowKey(provider: SyncService, callbackQuery: string, targetProfileId: string | null, returnTo: string): string {
+  return `${provider}:${callbackQuery}:${targetProfileId ?? ''}:${returnTo}`;
+}
+
 export default function ProviderConnect() {
-  const location = useLocation();
   const navigate = useNavigate();
   const { provider: routeProvider } = useParams();
   const [searchParams] = useSearchParams();
   const { user, householdId, refreshOnboarding } = useAuthStore();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const activeFlowRef = useRef<string | null>(null);
+  const mountedRef = useRef(false);
+  const activeRunIdRef = useRef(0);
+  const startedFlowKeyRef = useRef<string | null>(null);
 
   const provider: SyncService | null = routeProvider === 'trakt' || routeProvider === 'simkl' ? routeProvider : null;
   const targetProfileId = searchParams.get('targetProfileId')?.trim() || null;
@@ -71,6 +70,19 @@ export default function ProviderConnect() {
       userId: user.id,
     };
   }, [householdId, user]);
+  const latestConnectionStateRef = useRef({
+    onboardingContext,
+    targetProfileId,
+    returnTo,
+  });
+  const requiresOnboardingContext = !targetProfileId;
+  const canFinalizeConnection = !requiresOnboardingContext || onboardingContext !== null;
+
+  latestConnectionStateRef.current = {
+    onboardingContext,
+    targetProfileId,
+    returnTo,
+  };
 
   const config = provider ? providerConfig[provider] : null;
   const backLabel = returnTo === '/dashboard' ? 'Back to profiles' : 'Back to onboarding';
@@ -93,96 +105,93 @@ export default function ProviderConnect() {
 
     return `/auth/connect/${provider}?${params.toString()}`;
   }, [provider, returnTo, targetProfileId]);
+  const flowKey = useMemo(() => {
+    if (!provider) {
+      return null;
+    }
+
+    return buildFlowKey(provider, callbackQuery, targetProfileId, returnTo);
+  }, [callbackQuery, provider, returnTo, targetProfileId]);
 
   const finishConnection = useCallback(
-    async (service: SyncService, auth: ProviderAuthPayload, authTargetProfileId: string | null, authReturnTo: string | null) => {
-      const resolvedTargetProfileId = authTargetProfileId ?? targetProfileId;
-
-      logProviderConnect('finishing provider connection', {
-        service,
-        resolvedTargetProfileId,
-        authReturnTo,
-        providerUserId: auth.providerUserId,
-        providerUsername: auth.providerUsername,
-      });
+    async (service: SyncService, result: CompletedProviderAuthResult) => {
+      const {
+        onboardingContext: currentOnboardingContext,
+        targetProfileId: currentTargetProfileId,
+        returnTo: currentReturnTo,
+      } = latestConnectionStateRef.current;
+      const resolvedTargetProfileId = result.targetProfileId ?? currentTargetProfileId;
 
       if (resolvedTargetProfileId) {
-        await saveProviderAuthForProfile(resolvedTargetProfileId, service, auth);
+        await saveProviderAuthForProfile(resolvedTargetProfileId, service, result.auth);
       } else {
-        if (!onboardingContext) {
+        if (!currentOnboardingContext) {
           throw new Error('Account context is not ready yet.');
         }
 
-        await saveProviderAuth(onboardingContext, service, auth);
+        await saveProviderAuth(currentOnboardingContext, service, result.auth);
       }
 
+      clearPendingProviderAuth();
       await refreshOnboarding();
-      navigate(authReturnTo ?? returnTo, { replace: true });
+      navigate(result.returnTo ?? currentReturnTo, { replace: true });
     },
-    [navigate, onboardingContext, refreshOnboarding, returnTo, targetProfileId],
+    [navigate, refreshOnboarding],
   );
 
   useEffect(() => {
-    if (!provider) {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!provider || !flowKey) {
       return;
     }
 
-    let active = true;
-    const flowSignature = `${location.key}:${provider}:${callbackQuery}:${targetProfileId ?? ''}:${returnTo}`;
-
-    if (activeFlowRef.current === flowSignature) {
-      logProviderConnect('skipping duplicate provider auth effect', {
-        provider,
-        flowSignature,
-      });
+    if (hasCallbackPayload && !canFinalizeConnection) {
       return;
     }
 
-    activeFlowRef.current = flowSignature;
+    if (startedFlowKeyRef.current === flowKey) {
+      return;
+    }
+
+    startedFlowKeyRef.current = flowKey;
+    const runId = activeRunIdRef.current + 1;
+    activeRunIdRef.current = runId;
 
     void (async () => {
       try {
         setBusy(true);
         setError(null);
 
-        logProviderConnect('starting provider auth effect', {
-          provider,
-          hasCallbackPayload,
-          callbackKeys: Array.from(callbackSearchParams.keys()),
-          locationKey: location.key,
-          currentUrl: window.location.href,
-          targetProfileId,
-          returnTo,
-        });
-
         if (provider === 'trakt' && hasCallbackPayload) {
-          logProviderConnect('processing Trakt callback path');
           const result = await completeTraktAuthCallback(callbackSearchParams);
 
-          if (!active) {
-            logProviderConnect('aborting Trakt callback completion because effect is inactive', {}, 'warn');
+          if (!mountedRef.current || activeRunIdRef.current !== runId) {
             return;
           }
 
-          await finishConnection('trakt', result.auth, result.targetProfileId, result.returnTo);
+          await finishConnection('trakt', result);
           return;
         }
 
         if (provider === 'simkl' && hasCallbackPayload) {
-          logProviderConnect('processing SIMKL callback path');
           const result = await completeSimklAuthCallback(callbackSearchParams);
 
-          if (!active) {
-            logProviderConnect('aborting SIMKL callback completion because effect is inactive', {}, 'warn');
+          if (!mountedRef.current || activeRunIdRef.current !== runId) {
             return;
           }
 
-          await finishConnection('simkl', result.auth, result.targetProfileId, result.returnTo);
+          await finishConnection('simkl', result);
           return;
         }
 
         if (provider === 'trakt') {
-          logProviderConnect('starting Trakt redirect path');
           await beginTraktAuth({
             targetProfileId: targetProfileId ?? undefined,
             returnTo,
@@ -190,41 +199,26 @@ export default function ProviderConnect() {
           return;
         }
 
-        logProviderConnect('starting SIMKL redirect path');
         await beginSimklAuth({
           targetProfileId: targetProfileId ?? undefined,
           returnTo,
         });
       } catch (nextError) {
-        logProviderConnect('provider auth effect failed', {
-          provider,
-          message: toErrorMessage(nextError, providerConfig[provider].errorMessage),
-        }, 'error');
-        clearPendingProviderAuth('provider connect effect error');
+        if (!hasCallbackPayload) {
+          clearPendingProviderAuth();
+        }
 
-        if (active) {
-          activeFlowRef.current = null;
+        if (mountedRef.current && activeRunIdRef.current === runId) {
+          startedFlowKeyRef.current = null;
           setError(toErrorMessage(nextError, providerConfig[provider].errorMessage));
           setBusy(false);
         }
       }
     })();
-
-    return () => {
-      logProviderConnect('cleaning up provider auth effect', {
-        provider,
-        flowSignature,
-      });
-      active = false;
-    };
-  }, [callbackSearchParams, callbackQuery, finishConnection, hasCallbackPayload, location.key, provider, returnTo, targetProfileId]);
+  }, [callbackSearchParams, canFinalizeConnection, finishConnection, flowKey, hasCallbackPayload, provider, returnTo, targetProfileId]);
 
   const handleCancel = () => {
-    logProviderConnect('cancelling provider auth flow', {
-      provider,
-      returnTo,
-    });
-    clearPendingProviderAuth('user cancelled provider auth flow');
+    clearPendingProviderAuth();
 
     navigate(returnTo, { replace: true });
   };
