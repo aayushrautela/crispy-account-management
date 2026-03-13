@@ -41,9 +41,14 @@ export interface OnboardingState {
   openRouterConfigured: boolean;
 }
 
-interface OnboardingContext {
+export interface OnboardingContext {
   householdId: string;
   userId: string;
+}
+
+export interface ProviderAuthIntent {
+  targetProfileId?: string;
+  returnTo?: string;
 }
 
 interface ProfileDataRow {
@@ -58,6 +63,8 @@ interface PendingTraktAuthSession {
   state: string;
   codeVerifier: string;
   redirectUri: string;
+  targetProfileId: string | null;
+  returnTo: string | null;
   createdAt: string;
 }
 
@@ -67,7 +74,15 @@ export interface SimklPinSession {
   verificationUrl: string;
   intervalSeconds: number;
   expiresAt: string;
+  targetProfileId: string | null;
+  returnTo: string | null;
   createdAt: string;
+}
+
+export interface CompletedProviderAuthResult {
+  auth: ProviderAuthPayload;
+  targetProfileId: string | null;
+  returnTo: string | null;
 }
 
 const DEFAULT_PROFILE_NAME = 'Main Profile';
@@ -119,6 +134,15 @@ function hasProviderToken(value: unknown): boolean {
 
   const accessToken = value.accessToken;
   return typeof accessToken === 'string' && accessToken.length > 0;
+}
+
+function sanitizeReturnTo(value: string | undefined): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.startsWith('/') ? trimmed : null;
 }
 
 function buildOnboardingState(profileId: string | null, row: ProfileDataRow | null): OnboardingState {
@@ -252,6 +276,19 @@ export async function getOnboardingState(context: OnboardingContext): Promise<On
   return buildOnboardingState(profile.id, row);
 }
 
+export async function getProfileOnboardingState(profileId: string): Promise<OnboardingState> {
+  const row = await loadProfileData(profileId);
+  return buildOnboardingState(profileId, row);
+}
+
+export async function listProfileOnboardingStates(profileIds: string[]): Promise<Record<string, OnboardingState>> {
+  const entries = await Promise.all(
+    profileIds.map(async (profileId) => [profileId, await getProfileOnboardingState(profileId)] as const),
+  );
+
+  return Object.fromEntries(entries);
+}
+
 export async function setSelectedSyncService(
   context: OnboardingContext,
   service: SyncService,
@@ -272,15 +309,25 @@ export async function saveProviderAuth(
   payload: ProviderAuthPayload,
 ): Promise<OnboardingState> {
   const profile = await ensureOnboardingProfile(context);
-  const row = await loadProfileData(profile.id);
+  await saveProviderAuthForProfile(profile.id, service, payload);
 
-  await saveProfileData(profile.id, {
+  return getOnboardingState(context);
+}
+
+export async function saveProviderAuthForProfile(
+  profileId: string,
+  service: SyncService,
+  payload: ProviderAuthPayload,
+): Promise<OnboardingState> {
+  const row = await loadProfileData(profileId);
+
+  await saveProfileData(profileId, {
     settings: mergeSettings(row?.settings, service, true),
     trakt_auth: service === 'trakt' ? payload : row?.trakt_auth,
     simkl_auth: service === 'simkl' ? payload : row?.simkl_auth,
   });
 
-  return getOnboardingState(context);
+  return getProfileOnboardingState(profileId);
 }
 
 function getRequiredEnvVar(value: string | undefined, label: string): string {
@@ -327,6 +374,8 @@ function readPendingProviderAuth(): PendingTraktAuthSession | SimklPinSession | 
         state: typeof parsed.state === 'string' ? parsed.state : '',
         codeVerifier: typeof parsed.codeVerifier === 'string' ? parsed.codeVerifier : '',
         redirectUri: typeof parsed.redirectUri === 'string' ? parsed.redirectUri : '',
+        targetProfileId: typeof parsed.targetProfileId === 'string' ? parsed.targetProfileId : null,
+        returnTo: sanitizeReturnTo(typeof parsed.returnTo === 'string' ? parsed.returnTo : undefined),
         createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : '',
       };
     }
@@ -338,6 +387,8 @@ function readPendingProviderAuth(): PendingTraktAuthSession | SimklPinSession | 
         verificationUrl: typeof parsed.verificationUrl === 'string' ? parsed.verificationUrl : DEFAULT_SIMKL_VERIFICATION_URL,
         intervalSeconds: typeof parsed.intervalSeconds === 'number' ? parsed.intervalSeconds : 5,
         expiresAt: typeof parsed.expiresAt === 'string' ? parsed.expiresAt : '',
+        targetProfileId: typeof parsed.targetProfileId === 'string' ? parsed.targetProfileId : null,
+        returnTo: sanitizeReturnTo(typeof parsed.returnTo === 'string' ? parsed.returnTo : undefined),
         createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : '',
       };
     }
@@ -362,10 +413,10 @@ export function getPendingSimklPinSession(): SimklPinSession | null {
   return pending;
 }
 
-export async function beginTraktAuth(): Promise<void> {
+export async function beginTraktAuth(intent: ProviderAuthIntent = {}): Promise<void> {
   const clientId = getRequiredEnvVar(import.meta.env.VITE_TRAKT_CLIENT_ID, 'VITE_TRAKT_CLIENT_ID');
   const redirectUri =
-    import.meta.env.VITE_TRAKT_REDIRECT_URI?.trim() || `${window.location.origin}/auth/onboarding`;
+    import.meta.env.VITE_TRAKT_REDIRECT_URI?.trim() || `${window.location.origin}/auth/connect/trakt`;
   const state = createRandomString();
   const codeVerifier = createRandomString(48);
   const codeChallenge = await createCodeChallenge(codeVerifier);
@@ -375,6 +426,8 @@ export async function beginTraktAuth(): Promise<void> {
     state,
     codeVerifier,
     redirectUri,
+    targetProfileId: intent.targetProfileId ?? null,
+    returnTo: sanitizeReturnTo(intent.returnTo),
     createdAt: new Date().toISOString(),
   });
 
@@ -437,7 +490,7 @@ function buildProviderAuthPayload(
   };
 }
 
-export async function completeTraktAuthCallback(searchParams: URLSearchParams): Promise<ProviderAuthPayload> {
+export async function completeTraktAuthCallback(searchParams: URLSearchParams): Promise<CompletedProviderAuthResult> {
   const pending = readPendingProviderAuth();
 
   if (!pending || pending.provider !== 'trakt') {
@@ -489,10 +542,14 @@ export async function completeTraktAuthCallback(searchParams: URLSearchParams): 
   clearPendingProviderAuth();
 
   const profile = await fetchTraktProfile(payload.access_token, clientId);
-  return buildProviderAuthPayload(payload, profile);
+  return {
+    auth: buildProviderAuthPayload(payload, profile),
+    targetProfileId: pending.targetProfileId,
+    returnTo: pending.returnTo,
+  };
 }
 
-export async function beginSimklAuth(): Promise<SimklPinSession> {
+export async function beginSimklAuth(intent: ProviderAuthIntent = {}): Promise<SimklPinSession> {
   const clientId = getRequiredEnvVar(import.meta.env.VITE_SIMKL_CLIENT_ID, 'VITE_SIMKL_CLIENT_ID');
   const response = await fetch(`https://api.simkl.com/oauth/pin?client_id=${encodeURIComponent(clientId)}`);
   const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
@@ -512,6 +569,8 @@ export async function beginSimklAuth(): Promise<SimklPinSession> {
       typeof payload.verification_url === 'string' ? payload.verification_url : DEFAULT_SIMKL_VERIFICATION_URL,
     intervalSeconds,
     expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+    targetProfileId: intent.targetProfileId ?? null,
+    returnTo: sanitizeReturnTo(intent.returnTo),
     createdAt: new Date().toISOString(),
   };
 
@@ -520,8 +579,8 @@ export async function beginSimklAuth(): Promise<SimklPinSession> {
 }
 
 export type SimklPollResult =
-  | { status: 'pending'; intervalSeconds: number }
-  | { status: 'complete'; auth: ProviderAuthPayload };
+  | { status: 'pending'; intervalSeconds: number; targetProfileId: string | null; returnTo: string | null }
+  | { status: 'complete'; auth: ProviderAuthPayload; targetProfileId: string | null; returnTo: string | null };
 
 export async function pollSimklAuth(): Promise<SimklPollResult> {
   const pending = readPendingProviderAuth();
@@ -553,6 +612,8 @@ export async function pollSimklAuth(): Promise<SimklPollResult> {
         providerUserId: null,
         providerUsername: null,
       }),
+      targetProfileId: pending.targetProfileId,
+      returnTo: pending.returnTo,
     };
   }
 
@@ -566,5 +627,7 @@ export async function pollSimklAuth(): Promise<SimklPollResult> {
   return {
     status: 'pending',
     intervalSeconds: pending.intervalSeconds,
+    targetProfileId: pending.targetProfileId,
+    returnTo: pending.returnTo,
   };
 }

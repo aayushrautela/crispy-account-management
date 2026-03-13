@@ -8,6 +8,7 @@ export default function AuthLayout() {
   const location = useLocation();
   const isSignupRoute = location.pathname === '/auth/signup';
   const isOnboardingRoute = location.pathname === '/auth/onboarding';
+  const isProviderRoute = location.pathname.startsWith('/auth/connect/');
 
   if (status === 'booting') {
     return (
@@ -17,11 +18,11 @@ export default function AuthLayout() {
     );
   }
 
-  if (status === 'authenticated' && user && !isOnboardingRoute) {
+  if (status === 'authenticated' && user && !isOnboardingRoute && !isProviderRoute) {
     return <Navigate to={onboardingStatus === 'required' ? '/auth/onboarding' : '/dashboard'} replace />;
   }
 
-  if (status === 'anonymous' && isOnboardingRoute) {
+  if (status === 'anonymous' && (isOnboardingRoute || isProviderRoute)) {
     return <Navigate to="/auth/login" replace />;
   }
 
@@ -101,7 +102,11 @@ export default function AuthLayout() {
               </div>
             ) : (
               <div className="flex justify-center">
-                <div className={`w-full ${location.pathname === '/auth/onboarding' ? 'max-w-4xl' : 'max-w-md'}`}>
+                <div
+                  className={`w-full ${
+                    isOnboardingRoute ? 'max-w-4xl' : isProviderRoute ? 'max-w-2xl' : 'max-w-md'
+                  }`}
+                >
                   <Outlet />
                 </div>
               </div>

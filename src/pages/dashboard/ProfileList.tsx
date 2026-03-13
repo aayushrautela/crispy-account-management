@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Edit2, Loader2, Plus, Trash2, User } from 'lucide-react';
+import { CheckCircle2, Edit2, Link2, Loader2, Plus, Trash2, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Button } from '../../components/ui/Button';
 import { Modal } from '../../components/ui/Modal';
 import { ProfileForm } from '../../components/ProfileForm';
@@ -7,6 +8,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import type { Profile } from '../../types';
 import { resolveAvatarUrl } from '../../lib/avatar';
 import { mapSupabaseError } from '../../lib/errors';
+import { listProfileOnboardingStates, type OnboardingState } from '../../services/onboardingService';
 import {
   createProfile,
   deleteProfile,
@@ -17,13 +19,16 @@ import {
 } from '../../services/profileService';
 
 export default function ProfileList() {
+  const navigate = useNavigate();
   const { user, householdId, status } = useAuthStore();
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [profileStates, setProfileStates] = useState<Record<string, OnboardingState>>({});
   const [primaryProfileId, setPrimaryProfileId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
+  const [serviceModalProfile, setServiceModalProfile] = useState<Profile | null>(null);
   const [profileToDelete, setProfileToDelete] = useState<Profile | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -32,6 +37,7 @@ export default function ProfileList() {
   const fetchProfiles = useCallback(async () => {
     if (!canManageProfiles || !householdId) {
       setProfiles([]);
+      setProfileStates({});
       setPrimaryProfileId(null);
       setLoading(false);
       return;
@@ -44,10 +50,12 @@ export default function ProfileList() {
       const result = await listProfiles(householdId);
       const sortedProfiles = sortProfilesByPrimaryRule(result);
       setProfiles(sortedProfiles);
+      setProfileStates(await listProfileOnboardingStates(sortedProfiles.map((profile) => profile.id)));
 
       const primaryProfile = await getPrimaryProfile(householdId, sortedProfiles);
       setPrimaryProfileId(primaryProfile?.id ?? null);
     } catch (fetchError) {
+      setProfileStates({});
       setError(mapSupabaseError(fetchError, 'Failed to load profiles.'));
     } finally {
       setLoading(false);
@@ -63,16 +71,14 @@ export default function ProfileList() {
       throw new Error('Account context is not ready yet.');
     }
 
-    const created = await createProfile({
+    await createProfile({
       householdId,
       userId: user.id,
       name: payload.name,
       avatar: payload.avatar,
     });
 
-    const nextProfiles = sortProfilesByPrimaryRule([...profiles, created]);
-    setProfiles(nextProfiles);
-    setPrimaryProfileId(nextProfiles[0]?.id ?? null);
+    await fetchProfiles();
     setIsModalOpen(false);
     setEditingProfile(null);
   };
@@ -82,20 +88,23 @@ export default function ProfileList() {
       throw new Error('Profile context is missing.');
     }
 
-    const updated = await updateProfile({
+    await updateProfile({
       householdId,
       profileId: editingProfile.id,
       name: payload.name,
       avatar: payload.avatar,
     });
 
-    const nextProfiles = sortProfilesByPrimaryRule(
-      profiles.map((profile) => (profile.id === updated.id ? updated : profile)),
-    );
-    setProfiles(nextProfiles);
-    setPrimaryProfileId(nextProfiles[0]?.id ?? null);
+    await fetchProfiles();
     setIsModalOpen(false);
     setEditingProfile(null);
+  };
+
+  const handleConnectService = (profile: Profile, provider: 'trakt' | 'simkl') => {
+    setServiceModalProfile(null);
+    navigate(
+      `/auth/connect/${provider}?targetProfileId=${encodeURIComponent(profile.id)}&returnTo=${encodeURIComponent('/dashboard')}`,
+    );
   };
 
   const handleDelete = async () => {
@@ -114,9 +123,12 @@ export default function ProfileList() {
 
     try {
       await deleteProfile(householdId, profileToDelete.id);
-      const nextProfiles = profiles.filter((profile) => profile.id !== profileToDelete.id);
-      setProfiles(nextProfiles);
-      setPrimaryProfileId(nextProfiles[0]?.id ?? null);
+
+      if (serviceModalProfile?.id === profileToDelete.id) {
+        setServiceModalProfile(null);
+      }
+
+      await fetchProfiles();
       setProfileToDelete(null);
     } catch (deleteError) {
       setError(mapSupabaseError(deleteError, 'Failed to delete profile.'));
@@ -146,9 +158,7 @@ export default function ProfileList() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white">Profiles</h1>
-          <p className="mt-0.5 text-sm text-stone-500">
-            Manage profile identities inside your household.
-          </p>
+          <p className="mt-0.5 text-sm text-stone-500">Manage profile identities inside your household.</p>
         </div>
         <Button
           onClick={() => {
@@ -173,6 +183,9 @@ export default function ProfileList() {
         {profiles.map((profile) => {
           const avatarUrl = resolveAvatarUrl(profile.avatar);
           const isPrimary = profile.id === primaryProfileId;
+          const profileState = profileStates[profile.id];
+          const traktConnected = profileState?.traktConnected ?? false;
+          const simklConnected = profileState?.simklConnected ?? false;
 
           return (
             <div
@@ -197,10 +210,36 @@ export default function ProfileList() {
                     )}
                   </div>
                   <span className="text-[10px] font-mono text-stone-600">ID: {profile.id.slice(0, 8).toUpperCase()}</span>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                        traktConnected
+                          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
+                          : 'border-stone-700 bg-stone-900/70 text-stone-400'
+                      }`}
+                    >
+                      {traktConnected && <CheckCircle2 size={12} />}
+                      Trakt {traktConnected ? 'linked' : 'not linked'}
+                    </span>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                        simklConnected
+                          ? 'border-sky-500/20 bg-sky-500/10 text-sky-200'
+                          : 'border-stone-700 bg-stone-900/70 text-stone-400'
+                      }`}
+                    >
+                      {simklConnected && <CheckCircle2 size={12} />}
+                      SIMKL {simklConnected ? 'linked' : 'not linked'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setServiceModalProfile(profile)}>
+                  <Link2 size={16} className="mr-1.5" />
+                  Services
+                </Button>
                 <button
                   onClick={() => {
                     setEditingProfile(profile);
@@ -257,6 +296,72 @@ export default function ProfileList() {
       </Modal>
 
       <Modal
+        isOpen={!!serviceModalProfile}
+        onClose={() => setServiceModalProfile(null)}
+        title={serviceModalProfile ? `${serviceModalProfile.name} Services` : 'Profile Services'}
+      >
+        {serviceModalProfile && (
+          <div className="space-y-4">
+            <p className="text-sm text-stone-300">
+              Connect Trakt or SIMKL for this exact profile. Crispy tv now uses a dedicated auth route instead of sending profile links through onboarding.
+            </p>
+
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-stone-800 bg-stone-950/70 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Trakt</p>
+                    <p className="mt-1 text-xs leading-5 text-stone-400">
+                      Use Trakt for watch history, lists, and profile-specific sync.
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                      profileStates[serviceModalProfile.id]?.traktConnected
+                        ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
+                        : 'border-stone-700 bg-stone-900 text-stone-400'
+                    }`}
+                  >
+                    {profileStates[serviceModalProfile.id]?.traktConnected ? 'Connected' : 'Not connected'}
+                  </span>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <Button size="sm" onClick={() => handleConnectService(serviceModalProfile, 'trakt')}>
+                    {profileStates[serviceModalProfile.id]?.traktConnected ? 'Reconnect Trakt' : 'Connect Trakt'}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-stone-800 bg-stone-950/70 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">SIMKL</p>
+                    <p className="mt-1 text-xs leading-5 text-stone-400">
+                      Link a separate SIMKL account for this profile when you want a different sync source.
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                      profileStates[serviceModalProfile.id]?.simklConnected
+                        ? 'border-sky-500/20 bg-sky-500/10 text-sky-200'
+                        : 'border-stone-700 bg-stone-900 text-stone-400'
+                    }`}
+                  >
+                    {profileStates[serviceModalProfile.id]?.simklConnected ? 'Connected' : 'Not connected'}
+                  </span>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <Button size="sm" onClick={() => handleConnectService(serviceModalProfile, 'simkl')}>
+                    {profileStates[serviceModalProfile.id]?.simklConnected ? 'Reconnect SIMKL' : 'Connect SIMKL'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
         isOpen={!!profileToDelete}
         onClose={() => setProfileToDelete(null)}
         title="Delete Profile"
@@ -270,12 +375,7 @@ export default function ProfileList() {
             <Button variant="ghost" className="w-full md:w-auto" onClick={() => setProfileToDelete(null)}>
               Cancel
             </Button>
-            <Button
-              variant="danger"
-              className="w-full md:w-auto"
-              onClick={handleDelete}
-              isLoading={isDeleting}
-            >
+            <Button variant="danger" className="w-full md:w-auto" onClick={handleDelete} isLoading={isDeleting}>
               Delete Profile
             </Button>
           </div>

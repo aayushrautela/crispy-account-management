@@ -1,22 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link2, ShieldCheck } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { ShieldCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import simklLogo from '../../assets/brands/simkl.svg';
 import traktLogo from '../../assets/brands/trakt.svg';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { toErrorMessage } from '../../lib/errors';
-import {
-  beginSimklAuth,
-  beginTraktAuth,
-  clearPendingProviderAuth,
-  completeTraktAuthCallback,
-  getPendingSimklPinSession,
-  pollSimklAuth,
-  saveProviderAuth,
-  type SimklPinSession,
-  type SyncService,
-} from '../../services/onboardingService';
+import { type SyncService } from '../../services/onboardingService';
 import { useAuthStore } from '../../store/useAuthStore';
 
 const syncServiceOptions: Array<{
@@ -41,10 +30,7 @@ const syncServiceOptions: Array<{
 
 export default function Onboarding() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const {
-    user,
-    householdId,
     selectedSyncService,
     connectedSyncService,
     onboardingStatus,
@@ -53,21 +39,7 @@ export default function Onboarding() {
   const [step, setStep] = useState<'service' | 'openrouter'>(connectedSyncService ? 'openrouter' : 'service');
   const [selectedService, setSelectedService] = useState<SyncService | null>(selectedSyncService);
   const [openRouterKey, setOpenRouterKey] = useState('');
-  const [pendingSimklSession, setPendingSimklSession] = useState<SimklPinSession | null>(() => getPendingSimklPinSession());
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const [finishing, setFinishing] = useState(false);
-
-  const onboardingContext = useMemo(() => {
-    if (!user || !householdId) {
-      return null;
-    }
-
-    return {
-      householdId,
-      userId: user.id,
-    };
-  }, [householdId, user]);
 
   useEffect(() => {
     setSelectedService(selectedSyncService);
@@ -80,100 +52,6 @@ export default function Onboarding() {
     }
   }, [connectedSyncService]);
 
-  const callbackCode = searchParams.get('code');
-  const callbackError = searchParams.get('error');
-  const callbackState = searchParams.get('state');
-
-  useEffect(() => {
-    if (!onboardingContext || (!callbackCode && !callbackError)) {
-      return;
-    }
-
-    let active = true;
-
-    const handleCallback = async () => {
-      try {
-        setBusy(true);
-        setError(null);
-        const auth = await completeTraktAuthCallback(searchParams);
-        await saveProviderAuth(onboardingContext, 'trakt', auth);
-        await refreshOnboarding();
-
-        if (!active) {
-          return;
-        }
-
-        setSelectedService('trakt');
-        setStep('openrouter');
-        navigate('/auth/onboarding', { replace: true });
-      } catch (nextError) {
-        clearPendingProviderAuth();
-
-        if (!active) {
-          return;
-        }
-
-        setError(toErrorMessage(nextError, 'Unable to finish Trakt authorization.'));
-        navigate('/auth/onboarding', { replace: true });
-      } finally {
-        if (active) {
-          setBusy(false);
-        }
-      }
-    };
-
-    void handleCallback();
-
-    return () => {
-      active = false;
-    };
-  }, [callbackCode, callbackError, callbackState, navigate, onboardingContext, refreshOnboarding, searchParams]);
-
-  useEffect(() => {
-    if (!onboardingContext || !pendingSimklSession || busy) {
-      return;
-    }
-
-    let cancelled = false;
-    const timeoutId = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const result = await pollSimklAuth();
-
-          if (cancelled || result.status !== 'complete') {
-            return;
-          }
-
-          setBusy(true);
-          await saveProviderAuth(onboardingContext, 'simkl', result.auth);
-          await refreshOnboarding();
-
-          if (cancelled) {
-            return;
-          }
-
-          setPendingSimklSession(null);
-          setSelectedService('simkl');
-          setStep('openrouter');
-        } catch (nextError) {
-          if (!cancelled) {
-            setPendingSimklSession(null);
-            setError(toErrorMessage(nextError, 'Unable to finish SIMKL authorization.'));
-          }
-        } finally {
-          if (!cancelled) {
-            setBusy(false);
-          }
-        }
-      })();
-    }, pendingSimklSession.intervalSeconds * 1000);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeoutId);
-    };
-  }, [busy, onboardingContext, pendingSimklSession, refreshOnboarding]);
-
   const isTraktConnected = connectedSyncService === 'trakt';
   const isSimklConnected = connectedSyncService === 'simkl';
   const selectedOption = syncServiceOptions.find((option) => option.id === selectedService) ?? null;
@@ -182,17 +60,11 @@ export default function Onboarding() {
   const joinLabel = selectedService === 'trakt' ? 'Join Trakt for free' : selectedService === 'simkl' ? 'Join SIMKL for free' : null;
 
   const handleSelectService = (service: SyncService) => {
-    setError(null);
     setSelectedService(service);
-
-    if (pendingSimklSession && service !== 'simkl') {
-      clearPendingProviderAuth();
-      setPendingSimklSession(null);
-    }
   };
 
   const handleConnectService = async () => {
-    if (!onboardingContext || !selectedService) {
+    if (!selectedService) {
       return;
     }
 
@@ -201,50 +73,7 @@ export default function Onboarding() {
       return;
     }
 
-    try {
-      setBusy(true);
-      setError(null);
-
-      if (selectedService === 'trakt') {
-        await beginTraktAuth();
-        return;
-      }
-
-      clearPendingProviderAuth();
-      const pinSession = await beginSimklAuth();
-      setPendingSimklSession(pinSession);
-    } catch (nextError) {
-      setError(toErrorMessage(nextError, `Unable to start ${selectedService === 'trakt' ? 'Trakt' : 'SIMKL'} authorization.`));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleRefreshSimkl = async () => {
-    if (!onboardingContext || !pendingSimklSession) {
-      return;
-    }
-
-    try {
-      setBusy(true);
-      setError(null);
-      const result = await pollSimklAuth();
-
-      if (result.status !== 'complete') {
-        return;
-      }
-
-      await saveProviderAuth(onboardingContext, 'simkl', result.auth);
-      await refreshOnboarding();
-      setPendingSimklSession(null);
-      setSelectedService('simkl');
-      setStep('openrouter');
-    } catch (nextError) {
-      setPendingSimklSession(null);
-      setError(toErrorMessage(nextError, 'Unable to finish SIMKL authorization.'));
-    } finally {
-      setBusy(false);
-    }
+    navigate(`/auth/connect/${selectedService}?returnTo=${encodeURIComponent('/auth/onboarding')}`);
   };
 
   const handleComplete = async () => {
@@ -323,46 +152,11 @@ export default function Onboarding() {
               ) : null}
             </div>
 
-            {selectedService === 'simkl' && pendingSimklSession ? (
-              <div className="space-y-4 rounded-3xl border border-amber-400/15 bg-amber-400/5 p-5 text-left">
-                <p className="text-sm font-medium text-amber-200">Enter this code in SIMKL to finish linking your account.</p>
-                <div className="rounded-2xl bg-stone-950/70 px-4 py-5 text-center">
-                  <p className="text-xs uppercase tracking-[0.2em] text-stone-500">SIMKL code</p>
-                  <p className="mt-2 text-3xl font-black tracking-[0.3em] text-white">{pendingSimklSession.userCode}</p>
-                </div>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button
-                    onClick={() => {
-                      window.open(pendingSimklSession.verificationUrl, '_blank', 'noopener,noreferrer');
-                    }}
-                    className="h-12 flex-1 rounded-2xl bg-white text-sm font-bold text-stone-950 hover:bg-stone-100"
-                  >
-                    <Link2 className="mr-2 h-4 w-4" />
-                    Open SIMKL verification
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      void handleRefreshSimkl();
-                    }}
-                    isLoading={busy}
-                    className="h-12 flex-1 rounded-2xl"
-                  >
-                    I authorized SIMKL
-                  </Button>
-                </div>
-                <p className="text-xs leading-relaxed text-stone-400">
-                  Crispy tv is checking every {pendingSimklSession.intervalSeconds} seconds until SIMKL confirms the link.
-                </p>
-              </div>
-            ) : null}
-
             <div className="flex flex-col gap-4 sm:flex-row">
               <Button
                 onClick={() => {
                   void handleConnectService();
                 }}
-                isLoading={busy}
                 disabled={!selectedService || onboardingStatus === 'unknown'}
                 className="h-14 flex-1 rounded-2xl bg-white text-lg font-bold text-stone-950 hover:bg-stone-100 disabled:opacity-50"
               >
@@ -398,8 +192,6 @@ export default function Onboarding() {
               ) : null}
             </div>
           </div>
-
-          {error ? <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">{error}</div> : null}
         </div>
       ) : (
         <div className="space-y-8">

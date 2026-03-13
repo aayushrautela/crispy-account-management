@@ -7,6 +7,7 @@ import { AppErrorBoundary } from './components/AppErrorBoundary';
 import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
 import Onboarding from './pages/auth/Onboarding';
+import ProviderConnect from './pages/auth/ProviderConnect';
 import ProfileList from './pages/dashboard/ProfileList';
 import AccountSettings from './pages/dashboard/AccountSettings';
 import Addons from './pages/dashboard/Addons';
@@ -27,6 +28,7 @@ function App() {
             <Route path="login" element={<Login />} />
             <Route path="signup" element={<Signup />} />
             <Route path="onboarding" element={<Onboarding />} />
+            <Route path="connect/:provider" element={<ProviderConnect />} />
             <Route index element={<Navigate to="/auth/login" replace />} />
           </Route>
 
