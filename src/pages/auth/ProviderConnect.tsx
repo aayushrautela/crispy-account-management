@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ExternalLink, Loader2, ShieldCheck } from 'lucide-react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import simklLogo from '../../assets/brands/simkl.svg';
 import traktLogo from '../../assets/brands/trakt.svg';
 import { Button } from '../../components/ui/Button';
@@ -40,16 +40,21 @@ function normalizeReturnTo(value: string | null): string {
 }
 
 export default function ProviderConnect() {
+  const location = useLocation();
   const navigate = useNavigate();
   const { provider: routeProvider } = useParams();
   const [searchParams] = useSearchParams();
   const { user, householdId, refreshOnboarding } = useAuthStore();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeFlowRef = useRef<string | null>(null);
 
   const provider: SyncService | null = routeProvider === 'trakt' || routeProvider === 'simkl' ? routeProvider : null;
   const targetProfileId = searchParams.get('targetProfileId')?.trim() || null;
-  const returnTo = useMemo(() => normalizeReturnTo(searchParams.get('returnTo')), [searchParams]);
+  const returnTo = normalizeReturnTo(searchParams.get('returnTo'));
+  const callbackQuery = searchParams.toString();
+  const callbackSearchParams = useMemo(() => new URLSearchParams(callbackQuery), [callbackQuery]);
+  const hasCallbackPayload = callbackSearchParams.has('code') || callbackSearchParams.has('error');
   const onboardingContext = useMemo(() => {
     if (!user || !householdId) {
       return null;
@@ -63,6 +68,10 @@ export default function ProviderConnect() {
 
   const config = provider ? providerConfig[provider] : null;
   const backLabel = returnTo === '/dashboard' ? 'Back to profiles' : 'Back to onboarding';
+  const loadingTitle = hasCallbackPayload ? `Finalizing ${config?.name ?? 'provider'} connection` : config?.loadingTitle ?? 'Connecting provider';
+  const loadingBody = hasCallbackPayload
+    ? `Crispy tv is securely saving your ${config?.name ?? 'provider'} authorization and preparing the next step.`
+    : config?.loadingBody ?? 'Starting provider authorization.';
   const retryPath = useMemo(() => {
     if (!provider) {
       return returnTo;
@@ -105,7 +114,13 @@ export default function ProviderConnect() {
     }
 
     let active = true;
-    const hasCallbackPayload = Boolean(searchParams.get('code') || searchParams.get('error'));
+    const flowSignature = `${location.key}:${provider}:${callbackQuery}:${targetProfileId ?? ''}:${returnTo}`;
+
+    if (activeFlowRef.current === flowSignature) {
+      return;
+    }
+
+    activeFlowRef.current = flowSignature;
 
     void (async () => {
       try {
@@ -113,7 +128,7 @@ export default function ProviderConnect() {
         setError(null);
 
         if (provider === 'trakt' && hasCallbackPayload) {
-          const result = await completeTraktAuthCallback(searchParams);
+          const result = await completeTraktAuthCallback(callbackSearchParams);
 
           if (!active) {
             return;
@@ -124,7 +139,7 @@ export default function ProviderConnect() {
         }
 
         if (provider === 'simkl' && hasCallbackPayload) {
-          const result = await completeSimklAuthCallback(searchParams);
+          const result = await completeSimklAuthCallback(callbackSearchParams);
 
           if (!active) {
             return;
@@ -150,6 +165,7 @@ export default function ProviderConnect() {
         clearPendingProviderAuth();
 
         if (active) {
+          activeFlowRef.current = null;
           setError(toErrorMessage(nextError, providerConfig[provider].errorMessage));
           setBusy(false);
         }
@@ -159,12 +175,10 @@ export default function ProviderConnect() {
     return () => {
       active = false;
     };
-  }, [finishConnection, provider, returnTo, searchParams, targetProfileId]);
+  }, [callbackSearchParams, callbackQuery, finishConnection, hasCallbackPayload, location.key, provider, returnTo, targetProfileId]);
 
   const handleCancel = () => {
-    if (provider === 'simkl') {
-      clearPendingProviderAuth();
-    }
+    clearPendingProviderAuth();
 
     navigate(returnTo, { replace: true });
   };
@@ -190,11 +204,11 @@ export default function ProviderConnect() {
         <img src={config.logo} alt={config.name} className="h-14 w-14 object-contain" />
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-stone-400">Provider connection</p>
-          <h1 className="text-3xl font-bold tracking-tight text-white">{config.loadingTitle}</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-white">{loadingTitle}</h1>
         </div>
       </div>
 
-      <p className="text-base leading-7 text-stone-300">{config.loadingBody}</p>
+      <p className="text-base leading-7 text-stone-300">{loadingBody}</p>
 
       {provider === 'trakt' ? (
         <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 text-center">
@@ -248,7 +262,7 @@ export default function ProviderConnect() {
       ) : null}
 
       <div className="flex justify-start">
-        <Button variant="ghost" onClick={handleCancel} disabled={busy && provider === 'trakt'}>
+        <Button variant="ghost" onClick={handleCancel} disabled={busy}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           {backLabel}
         </Button>

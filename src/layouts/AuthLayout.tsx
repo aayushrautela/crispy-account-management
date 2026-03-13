@@ -72,16 +72,14 @@ export default function AuthLayout() {
           <div className="mx-auto w-full max-w-7xl">
             {shouldUseSplitLayout ? (
               <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-24">
-                <div className="max-w-2xl space-y-6">
-                  <div className="space-y-4">
-                    <h1 className="text-3xl font-bold text-white sm:text-4xl lg:text-5xl lg:leading-[1.1]">
-                      All your media in one place. Curated by AI.
-                    </h1>
-                    <p className="max-w-lg text-base leading-relaxed text-stone-300">
-                      A fully free, open-source media hub available across all your devices. Featuring native Trakt and
-                      SIMKL integration alongside powerful, highly personalized AI recommendations.
-                    </p>
-                  </div>
+                <div className="max-w-2xl space-y-4">
+                  <h1 className="text-3xl font-bold text-white sm:text-4xl lg:text-5xl">
+                    All your media in one place.
+                  </h1>
+                  <p className="max-w-lg text-base text-stone-400">
+                    A media hub for all your devices. Featuring native Trakt and
+                    SIMKL integration with personalized AI recommendations.
+                  </p>
                 </div>
 
                 <div className="flex justify-center lg:justify-end">

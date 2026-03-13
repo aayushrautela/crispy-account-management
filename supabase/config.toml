@@ -1,0 +1,5 @@
+[functions.trakt-oauth-exchange]
+verify_jwt = false
+
+[functions.simkl-oauth-exchange]
+verify_jwt = false
