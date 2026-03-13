@@ -40,6 +40,7 @@ VITE_SUPABASE_ANON_KEY=
 VITE_TRAKT_CLIENT_ID=
 VITE_TRAKT_REDIRECT_URI=http://localhost:5173/auth/connect/trakt
 VITE_SIMKL_CLIENT_ID=
+VITE_SIMKL_REDIRECT_URI=http://localhost:5173/auth/connect/simkl
 VITE_DOWNLOAD_URL_WINDOWS=
 VITE_DOWNLOAD_URL_ANDROID=
 VITE_DOWNLOAD_URL_LINUX=
@@ -50,17 +51,25 @@ Optional download URLs power the **Get the app** page. If unset, the UI shows "C
 Provider auth setup:
 
 - Register a Trakt app and allow the same redirect URI you set in `VITE_TRAKT_REDIRECT_URI`
-- Register a SIMKL app and copy its client id into `VITE_SIMKL_CLIENT_ID`
+- Register a SIMKL app, copy its client id into `VITE_SIMKL_CLIENT_ID`, and set the callback URL to `https://account.crispytv.tech/auth/connect/simkl` in production
+- Optionally set `VITE_SIMKL_REDIRECT_URI` when you need a non-default callback; otherwise the app uses `${window.location.origin}/auth/connect/simkl`
 - Trakt returns to `/auth/connect/trakt`
-- SIMKL runs through the dedicated `/auth/connect/simkl` flow
+- SIMKL now uses the standard OAuth code flow on `/auth/connect/simkl` instead of the PIN flow
 
 ## Edge function dependency
 
-Account deletion requires a deployed Supabase Edge Function named:
+This app expects these deployed Supabase Edge Functions:
 
 - `delete-account`
+- `simkl-oauth-exchange`
 
-The function should perform authenticated user deletion server-side (service role) and cascade according to your database policies.
+- `delete-account` should perform authenticated user deletion server-side (service role) and cascade according to your database policies.
+- `simkl-oauth-exchange` should exchange the SIMKL authorization code server-side so the client secret never ships to the browser.
+
+`simkl-oauth-exchange` must be deployed with these Supabase Edge Function secrets:
+
+- `SIMKL_CLIENT_ID`
+- `SIMKL_CLIENT_SECRET`
 
 ## Development
 

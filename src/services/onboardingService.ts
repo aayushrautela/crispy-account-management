@@ -68,12 +68,10 @@ interface PendingTraktAuthSession {
   createdAt: string;
 }
 
-export interface SimklPinSession {
+interface PendingSimklAuthSession {
   provider: 'simkl';
-  userCode: string;
-  verificationUrl: string;
-  intervalSeconds: number;
-  expiresAt: string;
+  state: string;
+  redirectUri: string;
   targetProfileId: string | null;
   returnTo: string | null;
   createdAt: string;
@@ -87,7 +85,7 @@ export interface CompletedProviderAuthResult {
 
 const DEFAULT_PROFILE_NAME = 'Main Profile';
 const PENDING_PROVIDER_AUTH_STORAGE_KEY = 'crispy.pending-provider-auth';
-const DEFAULT_SIMKL_VERIFICATION_URL = 'https://simkl.com/pin/';
+const SIMKL_OAUTH_EXCHANGE_FUNCTION = 'simkl-oauth-exchange';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -401,11 +399,11 @@ async function createCodeChallenge(codeVerifier: string): Promise<string> {
   return toBase64Url(digest);
 }
 
-function savePendingProviderAuth(session: PendingTraktAuthSession | SimklPinSession): void {
+function savePendingProviderAuth(session: PendingTraktAuthSession | PendingSimklAuthSession): void {
   window.sessionStorage.setItem(PENDING_PROVIDER_AUTH_STORAGE_KEY, JSON.stringify(session));
 }
 
-function readPendingProviderAuth(): PendingTraktAuthSession | SimklPinSession | null {
+function readPendingProviderAuth(): PendingTraktAuthSession | PendingSimklAuthSession | null {
   try {
     const raw = window.sessionStorage.getItem(PENDING_PROVIDER_AUTH_STORAGE_KEY);
 
@@ -430,10 +428,8 @@ function readPendingProviderAuth(): PendingTraktAuthSession | SimklPinSession | 
     if (parsed.provider === 'simkl') {
       return {
         provider: 'simkl',
-        userCode: typeof parsed.userCode === 'string' ? parsed.userCode : '',
-        verificationUrl: typeof parsed.verificationUrl === 'string' ? parsed.verificationUrl : DEFAULT_SIMKL_VERIFICATION_URL,
-        intervalSeconds: typeof parsed.intervalSeconds === 'number' ? parsed.intervalSeconds : 5,
-        expiresAt: typeof parsed.expiresAt === 'string' ? parsed.expiresAt : '',
+        state: typeof parsed.state === 'string' ? parsed.state : '',
+        redirectUri: typeof parsed.redirectUri === 'string' ? parsed.redirectUri : '',
         targetProfileId: typeof parsed.targetProfileId === 'string' ? parsed.targetProfileId : null,
         returnTo: sanitizeReturnTo(typeof parsed.returnTo === 'string' ? parsed.returnTo : undefined),
         createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : '',
@@ -448,16 +444,6 @@ function readPendingProviderAuth(): PendingTraktAuthSession | SimklPinSession | 
 
 export function clearPendingProviderAuth(): void {
   window.sessionStorage.removeItem(PENDING_PROVIDER_AUTH_STORAGE_KEY);
-}
-
-export function getPendingSimklPinSession(): SimklPinSession | null {
-  const pending = readPendingProviderAuth();
-
-  if (pending?.provider !== 'simkl') {
-    return null;
-  }
-
-  return pending;
 }
 
 export async function beginTraktAuth(intent: ProviderAuthIntent = {}): Promise<void> {
@@ -596,84 +582,89 @@ export async function completeTraktAuthCallback(searchParams: URLSearchParams): 
   };
 }
 
-export async function beginSimklAuth(intent: ProviderAuthIntent = {}): Promise<SimklPinSession> {
+export async function beginSimklAuth(intent: ProviderAuthIntent = {}): Promise<void> {
   const clientId = getRequiredEnvVar(import.meta.env.VITE_SIMKL_CLIENT_ID, 'VITE_SIMKL_CLIENT_ID');
-  const response = await fetch(`https://api.simkl.com/oauth/pin?client_id=${encodeURIComponent(clientId)}`);
-  const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-
-  if (!response.ok || !payload || typeof payload.user_code !== 'string') {
-    throw new Error(
-      typeof payload?.error === 'string' ? payload.error : 'Unable to start SIMKL authorization.',
-    );
-  }
-
-  const intervalSeconds = typeof payload.interval === 'number' ? payload.interval : 5;
-  const expiresIn = typeof payload.expires_in === 'number' ? payload.expires_in : 900;
-  const session: SimklPinSession = {
+  const redirectUri =
+    import.meta.env.VITE_SIMKL_REDIRECT_URI?.trim() || `${window.location.origin}/auth/connect/simkl`;
+  const state = createRandomString();
+  const session: PendingSimklAuthSession = {
     provider: 'simkl',
-    userCode: payload.user_code,
-    verificationUrl:
-      typeof payload.verification_url === 'string' ? payload.verification_url : DEFAULT_SIMKL_VERIFICATION_URL,
-    intervalSeconds,
-    expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
+    state,
+    redirectUri,
     targetProfileId: intent.targetProfileId ?? null,
     returnTo: sanitizeReturnTo(intent.returnTo),
     createdAt: new Date().toISOString(),
   };
 
   savePendingProviderAuth(session);
-  return session;
+
+  const authorizeUrl = new URL('https://simkl.com/oauth/authorize');
+  authorizeUrl.searchParams.set('response_type', 'code');
+  authorizeUrl.searchParams.set('client_id', clientId);
+  authorizeUrl.searchParams.set('redirect_uri', redirectUri);
+  authorizeUrl.searchParams.set('state', state);
+
+  window.location.assign(authorizeUrl.toString());
 }
 
-export type SimklPollResult =
-  | { status: 'pending'; intervalSeconds: number; targetProfileId: string | null; returnTo: string | null }
-  | { status: 'complete'; auth: ProviderAuthPayload; targetProfileId: string | null; returnTo: string | null };
+interface SimklOAuthExchangeResponse extends Record<string, unknown> {
+  access_token: string;
+  refresh_token?: string | null;
+  token_type?: string;
+  scope?: string;
+  expires_in?: number;
+  providerUserId?: string | null;
+  providerUsername?: string | null;
+}
 
-export async function pollSimklAuth(): Promise<SimklPollResult> {
+async function exchangeSimklCode(code: string, redirectUri: string): Promise<SimklOAuthExchangeResponse> {
+  const { data, error } = await supabase.functions.invoke(SIMKL_OAUTH_EXCHANGE_FUNCTION, {
+    body: {
+      code,
+      redirectUri,
+    },
+  });
+
+  if (error) {
+    throw new Error(mapSupabaseError(error, 'Unable to finish SIMKL authorization.'));
+  }
+
+  if (!isRecord(data) || typeof data.access_token !== 'string') {
+    throw new Error('SIMKL authorization returned an invalid response.');
+  }
+
+  return data as SimklOAuthExchangeResponse;
+}
+
+export async function completeSimklAuthCallback(searchParams: URLSearchParams): Promise<CompletedProviderAuthResult> {
   const pending = readPendingProviderAuth();
 
   if (!pending || pending.provider !== 'simkl') {
-    throw new Error('SIMKL sign-in session expired. Please start again.');
+    throw new Error('SIMKL sign-in session expired. Please try again.');
   }
 
-  if (Date.parse(pending.expiresAt) <= Date.now()) {
+  const code = searchParams.get('code');
+  const state = searchParams.get('state');
+  const providerError = searchParams.get('error');
+
+  if (providerError) {
     clearPendingProviderAuth();
-    throw new Error('SIMKL sign-in code expired. Please start again.');
+    throw new Error(searchParams.get('error_description') ?? 'SIMKL authorization was cancelled.');
   }
 
-  const clientId = getRequiredEnvVar(import.meta.env.VITE_SIMKL_CLIENT_ID, 'VITE_SIMKL_CLIENT_ID');
-  const response = await fetch(
-    `https://api.simkl.com/oauth/pin/${encodeURIComponent(pending.userCode)}?client_id=${encodeURIComponent(clientId)}`,
-  );
-  const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-
-  if (!response.ok || !payload) {
-    throw new Error('Unable to verify SIMKL authorization right now.');
-  }
-
-  if (payload.result === 'OK' && typeof payload.access_token === 'string') {
+  if (!code || !state || state !== pending.state) {
     clearPendingProviderAuth();
-    return {
-      status: 'complete',
-      auth: buildProviderAuthPayload(payload, {
-        providerUserId: null,
-        providerUsername: null,
-      }),
-      targetProfileId: pending.targetProfileId,
-      returnTo: pending.returnTo,
-    };
+    throw new Error('SIMKL authorization response could not be verified.');
   }
 
-  const errorMessage = typeof payload.error === 'string' ? payload.error : null;
-
-  if (errorMessage === 'expired_token' || errorMessage === 'bad_verification_code') {
-    clearPendingProviderAuth();
-    throw new Error('SIMKL sign-in code expired. Please start again.');
-  }
+  const payload = await exchangeSimklCode(code, pending.redirectUri);
+  clearPendingProviderAuth();
 
   return {
-    status: 'pending',
-    intervalSeconds: pending.intervalSeconds,
+    auth: buildProviderAuthPayload(payload, {
+      providerUserId: typeof payload.providerUserId === 'string' ? payload.providerUserId : null,
+      providerUsername: typeof payload.providerUsername === 'string' ? payload.providerUsername : null,
+    }),
     targetProfileId: pending.targetProfileId,
     returnTo: pending.returnTo,
   };

@@ -9,13 +9,11 @@ import {
   beginSimklAuth,
   beginTraktAuth,
   clearPendingProviderAuth,
+  completeSimklAuthCallback,
   completeTraktAuthCallback,
-  getPendingSimklPinSession,
-  pollSimklAuth,
   saveProviderAuth,
   saveProviderAuthForProfile,
   type ProviderAuthPayload,
-  type SimklPinSession,
   type SyncService,
 } from '../../services/onboardingService';
 import { useAuthStore } from '../../store/useAuthStore';
@@ -31,8 +29,8 @@ const providerConfig = {
   simkl: {
     name: 'SIMKL',
     logo: simklLogo,
-    loadingTitle: 'Connect SIMKL',
-    loadingBody: 'Use the code below to approve SIMKL, then Crispy tv will finish the connection automatically.',
+    loadingTitle: 'Redirecting to SIMKL',
+    loadingBody: 'You will be sent to SIMKL to approve access, then Crispy tv will bring you right back.',
     errorMessage: 'Unable to finish SIMKL authorization.',
   },
 } satisfies Record<SyncService, { name: string; logo: string; loadingTitle: string; loadingBody: string; errorMessage: string }>;
@@ -48,7 +46,6 @@ export default function ProviderConnect() {
   const { user, householdId, refreshOnboarding } = useAuthStore();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingSimklSession, setPendingSimklSession] = useState<SimklPinSession | null>(() => getPendingSimklPinSession());
 
   const provider: SyncService | null = routeProvider === 'trakt' || routeProvider === 'simkl' ? routeProvider : null;
   const targetProfileId = searchParams.get('targetProfileId')?.trim() || null;
@@ -66,6 +63,21 @@ export default function ProviderConnect() {
 
   const config = provider ? providerConfig[provider] : null;
   const backLabel = returnTo === '/dashboard' ? 'Back to profiles' : 'Back to onboarding';
+  const retryPath = useMemo(() => {
+    if (!provider) {
+      return returnTo;
+    }
+
+    const params = new URLSearchParams({
+      returnTo,
+    });
+
+    if (targetProfileId) {
+      params.set('targetProfileId', targetProfileId);
+    }
+
+    return `/auth/connect/${provider}?${params.toString()}`;
+  }, [provider, returnTo, targetProfileId]);
 
   const finishConnection = useCallback(
     async (service: SyncService, auth: ProviderAuthPayload, authTargetProfileId: string | null, authReturnTo: string | null) => {
@@ -88,7 +100,7 @@ export default function ProviderConnect() {
   );
 
   useEffect(() => {
-    if (provider !== 'trakt') {
+    if (!provider) {
       return;
     }
 
@@ -100,7 +112,7 @@ export default function ProviderConnect() {
         setBusy(true);
         setError(null);
 
-        if (hasCallbackPayload) {
+        if (provider === 'trakt' && hasCallbackPayload) {
           const result = await completeTraktAuthCallback(searchParams);
 
           if (!active) {
@@ -111,7 +123,26 @@ export default function ProviderConnect() {
           return;
         }
 
-        await beginTraktAuth({
+        if (provider === 'simkl' && hasCallbackPayload) {
+          const result = await completeSimklAuthCallback(searchParams);
+
+          if (!active) {
+            return;
+          }
+
+          await finishConnection('simkl', result.auth, result.targetProfileId, result.returnTo);
+          return;
+        }
+
+        if (provider === 'trakt') {
+          await beginTraktAuth({
+            targetProfileId: targetProfileId ?? undefined,
+            returnTo,
+          });
+          return;
+        }
+
+        await beginSimklAuth({
           targetProfileId: targetProfileId ?? undefined,
           returnTo,
         });
@@ -119,7 +150,7 @@ export default function ProviderConnect() {
         clearPendingProviderAuth();
 
         if (active) {
-          setError(toErrorMessage(nextError, providerConfig.trakt.errorMessage));
+          setError(toErrorMessage(nextError, providerConfig[provider].errorMessage));
           setBusy(false);
         }
       }
@@ -130,117 +161,9 @@ export default function ProviderConnect() {
     };
   }, [finishConnection, provider, returnTo, searchParams, targetProfileId]);
 
-  useEffect(() => {
-    if (provider !== 'simkl') {
-      return;
-    }
-
-    const pending = getPendingSimklPinSession();
-
-    if (pending && pending.targetProfileId === targetProfileId && pending.returnTo === returnTo) {
-      setPendingSimklSession(pending);
-      return;
-    }
-
-    let active = true;
-
-    void (async () => {
-      try {
-        setBusy(true);
-        setError(null);
-        setPendingSimklSession(null);
-        clearPendingProviderAuth();
-
-        const session = await beginSimklAuth({
-          targetProfileId: targetProfileId ?? undefined,
-          returnTo,
-        });
-
-        if (active) {
-          setPendingSimklSession(session);
-        }
-      } catch (nextError) {
-        if (active) {
-          setError(toErrorMessage(nextError, providerConfig.simkl.errorMessage));
-        }
-      } finally {
-        if (active) {
-          setBusy(false);
-        }
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [provider, returnTo, targetProfileId]);
-
-  useEffect(() => {
-    if (provider !== 'simkl' || !pendingSimklSession || busy) {
-      return;
-    }
-
-    let cancelled = false;
-    let timeoutId = 0;
-
-    const pollUntilComplete = async () => {
-      try {
-        const result = await pollSimklAuth();
-
-        if (cancelled) {
-          return;
-        }
-
-        if (result.status === 'complete') {
-          setBusy(true);
-          await finishConnection('simkl', result.auth, result.targetProfileId, result.returnTo);
-          return;
-        }
-
-        timeoutId = window.setTimeout(pollUntilComplete, result.intervalSeconds * 1000);
-      } catch (nextError) {
-        if (!cancelled) {
-          setPendingSimklSession(null);
-          setError(toErrorMessage(nextError, providerConfig.simkl.errorMessage));
-        }
-      }
-    };
-
-    timeoutId = window.setTimeout(pollUntilComplete, pendingSimklSession.intervalSeconds * 1000);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeoutId);
-    };
-  }, [busy, finishConnection, pendingSimklSession, provider]);
-
-  const handleManualSimklRefresh = async () => {
-    if (!pendingSimklSession) {
-      return;
-    }
-
-    try {
-      setBusy(true);
-      setError(null);
-      const result = await pollSimklAuth();
-
-      if (result.status !== 'complete') {
-        return;
-      }
-
-      await finishConnection('simkl', result.auth, result.targetProfileId, result.returnTo);
-    } catch (nextError) {
-      setPendingSimklSession(null);
-      setError(toErrorMessage(nextError, providerConfig.simkl.errorMessage));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const handleCancel = () => {
     if (provider === 'simkl') {
       clearPendingProviderAuth();
-      setPendingSimklSession(null);
     }
 
     navigate(returnTo, { replace: true });
@@ -278,7 +201,7 @@ export default function ProviderConnect() {
           {error ? (
             <div className="space-y-4">
               <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>
-              <Button onClick={() => navigate(`/auth/connect/trakt?returnTo=${encodeURIComponent(returnTo)}${targetProfileId ? `&targetProfileId=${encodeURIComponent(targetProfileId)}` : ''}`, { replace: true })}>
+              <Button onClick={() => navigate(retryPath, { replace: true })}>
                 Try again
               </Button>
             </div>
@@ -292,46 +215,33 @@ export default function ProviderConnect() {
       ) : null}
 
       {provider === 'simkl' ? (
-        <div className="space-y-4 rounded-3xl border border-sky-500/20 bg-sky-500/10 p-6">
-          {error ? <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">{error}</div> : null}
-
-          {pendingSimklSession ? (
-            <>
-              <div className="rounded-2xl border border-sky-500/20 bg-stone-950/80 p-5 text-center">
-                <p className="text-xs uppercase tracking-[0.2em] text-sky-200/70">SIMKL code</p>
-                <p className="mt-3 text-4xl font-black tracking-[0.3em] text-white">{pendingSimklSession.userCode}</p>
-              </div>
-              <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/5 p-4 text-sm text-emerald-100">
+        <div className="rounded-3xl border border-sky-500/20 bg-sky-500/10 p-6 text-center">
+          {error ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>
+              <Button onClick={() => navigate(retryPath, { replace: true })}>
+                Try again
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <Loader2 className="mx-auto h-10 w-10 animate-spin text-sky-300" />
+              <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/5 p-4 text-left text-sm text-emerald-100">
                 <div className="flex items-start gap-3">
                   <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                  <p>Crispy tv will keep checking for approval automatically. You can also confirm it manually after authorizing.</p>
+                  <p>SIMKL uses a full OAuth redirect now, so approval returns to this callback route without the manual PIN step.</p>
                 </div>
               </div>
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <a
-                  href={pendingSimklSession.verificationUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex h-12 flex-1 items-center justify-center rounded-2xl bg-white px-4 text-sm font-bold text-stone-950 transition hover:bg-stone-100"
-                >
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Open SIMKL verification
-                </a>
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    void handleManualSimklRefresh();
-                  }}
-                  isLoading={busy}
-                  className="h-12 flex-1 rounded-2xl"
-                >
-                  I authorized SIMKL
-                </Button>
-              </div>
-            </>
-          ) : (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-sm text-stone-300">
-              {busy ? 'Preparing your SIMKL code...' : 'Starting SIMKL authorization...'}
+              <p className="text-sm text-stone-300">Waiting for SIMKL to complete the authorization handshake.</p>
+              <a
+                href="https://simkl.com/settings/connected-apps/"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center text-sm font-semibold text-sky-200 transition hover:text-white"
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Manage SIMKL connected apps
+              </a>
             </div>
           )}
         </div>
