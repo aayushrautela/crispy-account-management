@@ -61,9 +61,11 @@ Provider auth setup:
 This app expects these deployed Supabase Edge Functions:
 
 - `delete-account`
+- `trakt-oauth-exchange`
 - `simkl-oauth-exchange`
 
 - `delete-account` should perform authenticated user deletion server-side (service role) and cascade according to your database policies.
+- `trakt-oauth-exchange` should exchange the Trakt authorization code server-side and fetch user profile info.
 - `simkl-oauth-exchange` should exchange the SIMKL authorization code server-side so the client secret never ships to the browser.
 
 `simkl-oauth-exchange` must be deployed with these Supabase Edge Function secrets:

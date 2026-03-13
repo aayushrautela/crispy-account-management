@@ -85,6 +85,7 @@ export interface CompletedProviderAuthResult {
 
 const DEFAULT_PROFILE_NAME = 'Main Profile';
 const PENDING_PROVIDER_AUTH_STORAGE_KEY = 'crispy.pending-provider-auth';
+const TRAKT_OAUTH_EXCHANGE_FUNCTION = 'trakt-oauth-exchange';
 const SIMKL_OAUTH_EXCHANGE_FUNCTION = 'simkl-oauth-exchange';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -475,33 +476,38 @@ export async function beginTraktAuth(intent: ProviderAuthIntent = {}): Promise<v
   window.location.assign(authorizeUrl.toString());
 }
 
-async function fetchTraktProfile(accessToken: string, clientId: string): Promise<{ providerUserId: string | null; providerUsername: string | null }> {
-  const response = await fetch('https://api.trakt.tv/users/settings', {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-      'trakt-api-key': clientId,
-      'trakt-api-version': '2',
+interface TraktOAuthExchangeResponse extends Record<string, unknown> {
+  access_token: string;
+  refresh_token?: string | null;
+  token_type?: string;
+  scope?: string;
+  expires_in?: number;
+  providerUserId?: string | null;
+  providerUsername?: string | null;
+}
+
+async function exchangeTraktCode(
+  code: string,
+  codeVerifier: string,
+  redirectUri: string,
+): Promise<TraktOAuthExchangeResponse> {
+  const { data, error } = await supabase.functions.invoke(TRAKT_OAUTH_EXCHANGE_FUNCTION, {
+    body: {
+      code,
+      codeVerifier,
+      redirectUri,
     },
   });
 
-  if (!response.ok) {
-    return {
-      providerUserId: null,
-      providerUsername: null,
-    };
+  if (error) {
+    throw new Error(mapSupabaseError(error, 'Unable to finish Trakt authorization.'));
   }
 
-  const payload = (await response.json()) as Record<string, unknown>;
-  const user = isRecord(payload.user) ? payload.user : null;
-  const ids = user && isRecord(user.ids) ? user.ids : null;
-  const username = user && typeof user.username === 'string' ? user.username : null;
-  const slug = ids && typeof ids.slug === 'string' ? ids.slug : null;
+  if (!isRecord(data) || typeof data.access_token !== 'string') {
+    throw new Error('Trakt authorization returned an invalid response.');
+  }
 
-  return {
-    providerUserId: slug,
-    providerUsername: username,
-  };
+  return data as TraktOAuthExchangeResponse;
 }
 
 function buildProviderAuthPayload(
@@ -544,39 +550,14 @@ export async function completeTraktAuthCallback(searchParams: URLSearchParams): 
     throw new Error('Trakt authorization response could not be verified.');
   }
 
-  const clientId = getRequiredEnvVar(import.meta.env.VITE_TRAKT_CLIENT_ID, 'VITE_TRAKT_CLIENT_ID');
-  const response = await fetch('https://api.trakt.tv/oauth/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'trakt-api-key': clientId,
-      'trakt-api-version': '2',
-    },
-    body: JSON.stringify({
-      code,
-      client_id: clientId,
-      code_verifier: pending.codeVerifier,
-      redirect_uri: pending.redirectUri,
-      grant_type: 'authorization_code',
-    }),
-  });
-
-  const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-
-  if (!response.ok || !payload || typeof payload.access_token !== 'string') {
-    clearPendingProviderAuth();
-    throw new Error(
-      typeof payload?.error_description === 'string'
-        ? payload.error_description
-        : 'Unable to finish Trakt authorization.',
-    );
-  }
-
+  const payload = await exchangeTraktCode(code, pending.codeVerifier, pending.redirectUri);
   clearPendingProviderAuth();
 
-  const profile = await fetchTraktProfile(payload.access_token, clientId);
   return {
-    auth: buildProviderAuthPayload(payload, profile),
+    auth: buildProviderAuthPayload(payload, {
+      providerUserId: typeof payload.providerUserId === 'string' ? payload.providerUserId : null,
+      providerUsername: typeof payload.providerUsername === 'string' ? payload.providerUsername : null,
+    }),
     targetProfileId: pending.targetProfileId,
     returnTo: pending.returnTo,
   };
