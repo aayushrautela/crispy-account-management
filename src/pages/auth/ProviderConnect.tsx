@@ -35,6 +35,12 @@ const providerConfig = {
   },
 } satisfies Record<SyncService, { name: string; logo: string; loadingTitle: string; loadingBody: string; errorMessage: string }>;
 
+const PROVIDER_CONNECT_LOG_PREFIX = '[provider-connect]';
+
+function logProviderConnect(event: string, details: Record<string, unknown> = {}, level: 'info' | 'warn' | 'error' = 'info') {
+  console[level](`${PROVIDER_CONNECT_LOG_PREFIX} ${event}`, details);
+}
+
 function normalizeReturnTo(value: string | null): string {
   return value && value.startsWith('/') ? value : '/auth/onboarding';
 }
@@ -92,6 +98,14 @@ export default function ProviderConnect() {
     async (service: SyncService, auth: ProviderAuthPayload, authTargetProfileId: string | null, authReturnTo: string | null) => {
       const resolvedTargetProfileId = authTargetProfileId ?? targetProfileId;
 
+      logProviderConnect('finishing provider connection', {
+        service,
+        resolvedTargetProfileId,
+        authReturnTo,
+        providerUserId: auth.providerUserId,
+        providerUsername: auth.providerUsername,
+      });
+
       if (resolvedTargetProfileId) {
         await saveProviderAuthForProfile(resolvedTargetProfileId, service, auth);
       } else {
@@ -117,6 +131,10 @@ export default function ProviderConnect() {
     const flowSignature = `${location.key}:${provider}:${callbackQuery}:${targetProfileId ?? ''}:${returnTo}`;
 
     if (activeFlowRef.current === flowSignature) {
+      logProviderConnect('skipping duplicate provider auth effect', {
+        provider,
+        flowSignature,
+      });
       return;
     }
 
@@ -127,10 +145,22 @@ export default function ProviderConnect() {
         setBusy(true);
         setError(null);
 
+        logProviderConnect('starting provider auth effect', {
+          provider,
+          hasCallbackPayload,
+          callbackKeys: Array.from(callbackSearchParams.keys()),
+          locationKey: location.key,
+          currentUrl: window.location.href,
+          targetProfileId,
+          returnTo,
+        });
+
         if (provider === 'trakt' && hasCallbackPayload) {
+          logProviderConnect('processing Trakt callback path');
           const result = await completeTraktAuthCallback(callbackSearchParams);
 
           if (!active) {
+            logProviderConnect('aborting Trakt callback completion because effect is inactive', {}, 'warn');
             return;
           }
 
@@ -139,9 +169,11 @@ export default function ProviderConnect() {
         }
 
         if (provider === 'simkl' && hasCallbackPayload) {
+          logProviderConnect('processing SIMKL callback path');
           const result = await completeSimklAuthCallback(callbackSearchParams);
 
           if (!active) {
+            logProviderConnect('aborting SIMKL callback completion because effect is inactive', {}, 'warn');
             return;
           }
 
@@ -150,6 +182,7 @@ export default function ProviderConnect() {
         }
 
         if (provider === 'trakt') {
+          logProviderConnect('starting Trakt redirect path');
           await beginTraktAuth({
             targetProfileId: targetProfileId ?? undefined,
             returnTo,
@@ -157,12 +190,17 @@ export default function ProviderConnect() {
           return;
         }
 
+        logProviderConnect('starting SIMKL redirect path');
         await beginSimklAuth({
           targetProfileId: targetProfileId ?? undefined,
           returnTo,
         });
       } catch (nextError) {
-        clearPendingProviderAuth();
+        logProviderConnect('provider auth effect failed', {
+          provider,
+          message: toErrorMessage(nextError, providerConfig[provider].errorMessage),
+        }, 'error');
+        clearPendingProviderAuth('provider connect effect error');
 
         if (active) {
           activeFlowRef.current = null;
@@ -173,12 +211,20 @@ export default function ProviderConnect() {
     })();
 
     return () => {
+      logProviderConnect('cleaning up provider auth effect', {
+        provider,
+        flowSignature,
+      });
       active = false;
     };
   }, [callbackSearchParams, callbackQuery, finishConnection, hasCallbackPayload, location.key, provider, returnTo, targetProfileId]);
 
   const handleCancel = () => {
-    clearPendingProviderAuth();
+    logProviderConnect('cancelling provider auth flow', {
+      provider,
+      returnTo,
+    });
+    clearPendingProviderAuth('user cancelled provider auth flow');
 
     navigate(returnTo, { replace: true });
   };

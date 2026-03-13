@@ -87,6 +87,50 @@ const DEFAULT_PROFILE_NAME = 'Main Profile';
 const PENDING_PROVIDER_AUTH_STORAGE_KEY = 'crispy.pending-provider-auth';
 const TRAKT_OAUTH_EXCHANGE_FUNCTION = 'trakt-oauth-exchange';
 const SIMKL_OAUTH_EXCHANGE_FUNCTION = 'simkl-oauth-exchange';
+const PROVIDER_AUTH_LOG_PREFIX = '[provider-auth]';
+
+function maskAuthValue(value: string | null | undefined, visible = 6): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  if (trimmed.length <= visible) {
+    return trimmed;
+  }
+
+  return `${trimmed.slice(0, visible)}...${trimmed.slice(-visible)}`;
+}
+
+function summarizePendingProviderAuth(
+  session: PendingTraktAuthSession | PendingSimklAuthSession | null,
+): Record<string, unknown> | null {
+  if (!session) {
+    return null;
+  }
+
+  const createdAtMs = Number.isNaN(Date.parse(session.createdAt)) ? null : Date.parse(session.createdAt);
+
+  return {
+    provider: session.provider,
+    state: maskAuthValue(session.state, 4),
+    redirectUri: session.redirectUri,
+    targetProfileId: session.targetProfileId,
+    returnTo: session.returnTo,
+    createdAt: session.createdAt,
+    ageMs: createdAtMs === null ? null : Date.now() - createdAtMs,
+    hasCodeVerifier: 'codeVerifier' in session && typeof session.codeVerifier === 'string' && session.codeVerifier.length > 0,
+  };
+}
+
+function logProviderAuth(event: string, details: Record<string, unknown> = {}, level: 'info' | 'warn' | 'error' = 'info'): void {
+  console[level](`${PROVIDER_AUTH_LOG_PREFIX} ${event}`, details);
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -400,8 +444,40 @@ async function createCodeChallenge(codeVerifier: string): Promise<string> {
   return toBase64Url(digest);
 }
 
+function parsePendingProviderAuth(raw: string): PendingTraktAuthSession | PendingSimklAuthSession | null {
+  const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+  if (parsed.provider === 'trakt') {
+    return {
+      provider: 'trakt',
+      state: typeof parsed.state === 'string' ? parsed.state : '',
+      codeVerifier: typeof parsed.codeVerifier === 'string' ? parsed.codeVerifier : '',
+      redirectUri: typeof parsed.redirectUri === 'string' ? parsed.redirectUri : '',
+      targetProfileId: typeof parsed.targetProfileId === 'string' ? parsed.targetProfileId : null,
+      returnTo: sanitizeReturnTo(typeof parsed.returnTo === 'string' ? parsed.returnTo : undefined),
+      createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : '',
+    };
+  }
+
+  if (parsed.provider === 'simkl') {
+    return {
+      provider: 'simkl',
+      state: typeof parsed.state === 'string' ? parsed.state : '',
+      redirectUri: typeof parsed.redirectUri === 'string' ? parsed.redirectUri : '',
+      targetProfileId: typeof parsed.targetProfileId === 'string' ? parsed.targetProfileId : null,
+      returnTo: sanitizeReturnTo(typeof parsed.returnTo === 'string' ? parsed.returnTo : undefined),
+      createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : '',
+    };
+  }
+
+  return null;
+}
+
 function savePendingProviderAuth(session: PendingTraktAuthSession | PendingSimklAuthSession): void {
   window.sessionStorage.setItem(PENDING_PROVIDER_AUTH_STORAGE_KEY, JSON.stringify(session));
+  logProviderAuth('saved pending provider auth session', {
+    session: summarizePendingProviderAuth(session),
+  });
 }
 
 function readPendingProviderAuth(): PendingTraktAuthSession | PendingSimklAuthSession | null {
@@ -409,41 +485,42 @@ function readPendingProviderAuth(): PendingTraktAuthSession | PendingSimklAuthSe
     const raw = window.sessionStorage.getItem(PENDING_PROVIDER_AUTH_STORAGE_KEY);
 
     if (!raw) {
+      logProviderAuth('pending provider auth session not found', {
+        storageKey: PENDING_PROVIDER_AUTH_STORAGE_KEY,
+      }, 'warn');
       return null;
     }
 
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const session = parsePendingProviderAuth(raw);
 
-    if (parsed.provider === 'trakt') {
-      return {
-        provider: 'trakt',
-        state: typeof parsed.state === 'string' ? parsed.state : '',
-        codeVerifier: typeof parsed.codeVerifier === 'string' ? parsed.codeVerifier : '',
-        redirectUri: typeof parsed.redirectUri === 'string' ? parsed.redirectUri : '',
-        targetProfileId: typeof parsed.targetProfileId === 'string' ? parsed.targetProfileId : null,
-        returnTo: sanitizeReturnTo(typeof parsed.returnTo === 'string' ? parsed.returnTo : undefined),
-        createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : '',
-      };
-    }
+    logProviderAuth('read pending provider auth session', {
+      session: summarizePendingProviderAuth(session),
+    }, session ? 'info' : 'warn');
 
-    if (parsed.provider === 'simkl') {
-      return {
-        provider: 'simkl',
-        state: typeof parsed.state === 'string' ? parsed.state : '',
-        redirectUri: typeof parsed.redirectUri === 'string' ? parsed.redirectUri : '',
-        targetProfileId: typeof parsed.targetProfileId === 'string' ? parsed.targetProfileId : null,
-        returnTo: sanitizeReturnTo(typeof parsed.returnTo === 'string' ? parsed.returnTo : undefined),
-        createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : '',
-      };
-    }
-
-    return null;
-  } catch {
+    return session;
+  } catch (error) {
+    logProviderAuth('failed to parse pending provider auth session', {
+      error: error instanceof Error ? error.message : String(error),
+    }, 'error');
     return null;
   }
 }
 
-export function clearPendingProviderAuth(): void {
+export function clearPendingProviderAuth(reason = 'manual'): void {
+  const raw = window.sessionStorage.getItem(PENDING_PROVIDER_AUTH_STORAGE_KEY);
+  const session = raw ? (() => {
+    try {
+      return parsePendingProviderAuth(raw);
+    } catch {
+      return null;
+    }
+  })() : null;
+
+  logProviderAuth('clearing pending provider auth session', {
+    reason,
+    hadRawSession: Boolean(raw),
+    session: summarizePendingProviderAuth(session),
+  });
   window.sessionStorage.removeItem(PENDING_PROVIDER_AUTH_STORAGE_KEY);
 }
 
@@ -454,6 +531,15 @@ export async function beginTraktAuth(intent: ProviderAuthIntent = {}): Promise<v
   const state = createRandomString();
   const codeVerifier = createRandomString(48);
   const codeChallenge = await createCodeChallenge(codeVerifier);
+
+  logProviderAuth('starting Trakt OAuth flow', {
+    targetProfileId: intent.targetProfileId ?? null,
+    returnTo: sanitizeReturnTo(intent.returnTo),
+    redirectUri,
+    currentUrl: window.location.href,
+    state: maskAuthValue(state, 4),
+    codeVerifierLength: codeVerifier.length,
+  });
 
   savePendingProviderAuth({
     provider: 'trakt',
@@ -473,6 +559,10 @@ export async function beginTraktAuth(intent: ProviderAuthIntent = {}): Promise<v
   authorizeUrl.searchParams.set('code_challenge', codeChallenge);
   authorizeUrl.searchParams.set('code_challenge_method', 'S256');
 
+  logProviderAuth('redirecting browser to Trakt authorize URL', {
+    authorizeUrl: authorizeUrl.toString(),
+  });
+
   window.location.assign(authorizeUrl.toString());
 }
 
@@ -491,6 +581,13 @@ async function exchangeTraktCode(
   codeVerifier: string,
   redirectUri: string,
 ): Promise<TraktOAuthExchangeResponse> {
+  logProviderAuth('invoking Trakt OAuth exchange function', {
+    functionName: TRAKT_OAUTH_EXCHANGE_FUNCTION,
+    redirectUri,
+    code: maskAuthValue(code, 4),
+    codeVerifierLength: codeVerifier.length,
+  });
+
   const { data, error } = await supabase.functions.invoke(TRAKT_OAUTH_EXCHANGE_FUNCTION, {
     body: {
       code,
@@ -500,14 +597,28 @@ async function exchangeTraktCode(
   });
 
   if (error) {
+    logProviderAuth('Trakt OAuth exchange function returned a Supabase error', {
+      message: mapSupabaseError(error, 'Unable to finish Trakt authorization.'),
+    }, 'error');
     throw new Error(mapSupabaseError(error, 'Unable to finish Trakt authorization.'));
   }
 
   if (!isRecord(data) || typeof data.access_token !== 'string') {
     const serverMessage =
       isRecord(data) && typeof data.error === 'string' ? data.error : null;
+    logProviderAuth('Trakt OAuth exchange returned an invalid payload', {
+      serverMessage,
+      dataKeys: isRecord(data) ? Object.keys(data) : null,
+    }, 'error');
     throw new Error(serverMessage ?? 'Trakt authorization returned an invalid response.');
   }
+
+  logProviderAuth('Trakt OAuth exchange succeeded', {
+    providerUserId: typeof data.providerUserId === 'string' ? data.providerUserId : null,
+    providerUsername: typeof data.providerUsername === 'string' ? data.providerUsername : null,
+    hasRefreshToken: typeof data.refresh_token === 'string' && data.refresh_token.length > 0,
+    scope: typeof data.scope === 'string' ? data.scope : null,
+  });
 
   return data as TraktOAuthExchangeResponse;
 }
@@ -533,27 +644,41 @@ function buildProviderAuthPayload(
 
 export async function completeTraktAuthCallback(searchParams: URLSearchParams): Promise<CompletedProviderAuthResult> {
   const pending = readPendingProviderAuth();
+  const code = searchParams.get('code');
+  const state = searchParams.get('state');
+  const providerError = searchParams.get('error');
+
+  logProviderAuth('processing Trakt OAuth callback', {
+    callbackUrl: window.location.href,
+    hasCode: Boolean(code),
+    hasState: Boolean(state),
+    providerError,
+    pending: summarizePendingProviderAuth(pending),
+  });
 
   if (!pending || pending.provider !== 'trakt') {
     throw new Error('Trakt sign-in session expired. Please try again.');
   }
 
-  const code = searchParams.get('code');
-  const state = searchParams.get('state');
-  const providerError = searchParams.get('error');
-
   if (providerError) {
-    clearPendingProviderAuth();
+    clearPendingProviderAuth('trakt callback returned provider error');
     throw new Error(searchParams.get('error_description') ?? 'Trakt authorization was cancelled.');
   }
 
   if (!code || !state || state !== pending.state) {
-    clearPendingProviderAuth();
+    logProviderAuth('Trakt OAuth callback verification failed', {
+      hasCode: Boolean(code),
+      hasState: Boolean(state),
+      callbackState: maskAuthValue(state, 4),
+      pendingState: maskAuthValue(pending.state, 4),
+      statesMatch: Boolean(code) && Boolean(state) && state === pending.state,
+    }, 'warn');
+    clearPendingProviderAuth('trakt callback verification failed');
     throw new Error('Trakt authorization response could not be verified.');
   }
 
   const payload = await exchangeTraktCode(code, pending.codeVerifier, pending.redirectUri);
-  clearPendingProviderAuth();
+  clearPendingProviderAuth('trakt callback completed successfully');
 
   return {
     auth: buildProviderAuthPayload(payload, {
