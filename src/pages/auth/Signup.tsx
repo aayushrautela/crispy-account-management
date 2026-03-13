@@ -14,6 +14,7 @@ export default function Signup() {
     email: '',
     password: '',
     confirmPassword: '',
+    referralCode: '',
   });
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -28,7 +29,9 @@ export default function Signup() {
     setError(null);
 
     try {
-      const result = await signUpWithEmailPassword(formData.email.trim(), formData.password);
+      const result = await signUpWithEmailPassword(formData.email.trim(), formData.password, {
+        referralCode: formData.referralCode,
+      });
 
       if (result.requiresEmailVerification) {
         setEmailVerificationPending(true);
@@ -114,6 +117,16 @@ export default function Signup() {
           onChange={(event) => setFormData((current) => ({ ...current, confirmPassword: event.target.value }))}
           minLength={8}
           required
+        />
+        <Input
+          id="referralCode"
+          name="referralCode"
+          type="text"
+          autoComplete="off"
+          label="Referral code"
+          placeholder="Optional"
+          value={formData.referralCode}
+          onChange={(event) => setFormData((current) => ({ ...current, referralCode: event.target.value }))}
         />
 
         {error && (

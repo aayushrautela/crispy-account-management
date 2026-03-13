@@ -6,6 +6,10 @@ export interface SignUpResult {
   requiresEmailVerification: boolean;
 }
 
+interface SignUpOptions {
+  referralCode?: string;
+}
+
 function normalizeCredentials(email: string, password: string): { email: string; password: string } {
   return {
     email: emailSchema.parse(email),
@@ -22,9 +26,24 @@ export async function signInWithEmailPassword(email: string, password: string): 
   }
 }
 
-export async function signUpWithEmailPassword(email: string, password: string): Promise<SignUpResult> {
+export async function signUpWithEmailPassword(
+  email: string,
+  password: string,
+  options: SignUpOptions = {},
+): Promise<SignUpResult> {
   const credentials = normalizeCredentials(email, password);
-  const { data, error } = await supabase.auth.signUp(credentials);
+  const referralCode = options.referralCode?.trim();
+  const { data, error } = await supabase.auth.signUp({
+    ...credentials,
+    options: referralCode
+      ? {
+          data: {
+            referralCode,
+            referalCode: referralCode,
+          },
+        }
+      : undefined,
+  });
 
   if (error) {
     throw new Error(mapSupabaseError(error, 'Unable to create account.'));

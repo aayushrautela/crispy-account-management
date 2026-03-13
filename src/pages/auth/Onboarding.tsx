@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { ExternalLink, House, Search, ShieldCheck, Sparkles } from 'lucide-react';
+import { CheckCircle2, ExternalLink, Globe, House, Search, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import simklLogo from '../../assets/brands/simkl.svg';
 import traktLogo from '../../assets/brands/trakt.svg';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { mapSupabaseError } from '../../lib/errors';
+import { addAddon } from '../../services/addonService';
 import { type SyncService } from '../../services/onboardingService';
 import { useAuthStore } from '../../store/useAuthStore';
 
@@ -46,18 +48,54 @@ const openRouterBenefits = [
   },
 ] as const;
 
+type OnboardingStep = 'service' | 'openrouter' | 'quickstart' | 'addon-config';
+type QuickStartOption = 'torrent' | 'https';
+
+const SECRET_REFERRAL_CODE = 'epic55';
+
+const quickStartOptions: Array<{
+  id: QuickStartOption;
+  title: string;
+  description: string;
+  addonUrl: string;
+  icon: typeof Zap;
+}> = [
+  {
+    id: 'torrent',
+    title: 'Torrent',
+    description: 'Install the torrent quick start addon and keep the rest of setup moving.',
+    addonUrl: import.meta.env.VITE_ONBOARDING_TORRENT_ADDON_URL?.trim() ?? '',
+    icon: Zap,
+  },
+  {
+    id: 'https',
+    title: 'HTTPS',
+    description: 'Install the HTTPS quick start addon so we can wire configuration on the next screen.',
+    addonUrl: import.meta.env.VITE_ONBOARDING_HTTPS_ADDON_URL?.trim() ?? '',
+    icon: Globe,
+  },
+] as const;
+
+function normalizeReferralCode(value: unknown): string {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
 export default function Onboarding() {
   const navigate = useNavigate();
   const {
+    user,
     selectedSyncService,
     connectedSyncService,
     onboardingStatus,
     refreshOnboarding,
   } = useAuthStore();
-  const [step, setStep] = useState<'service' | 'openrouter'>(connectedSyncService ? 'openrouter' : 'service');
+  const [step, setStep] = useState<OnboardingStep>(connectedSyncService ? 'openrouter' : 'service');
   const [selectedService, setSelectedService] = useState<SyncService | null>(selectedSyncService);
   const [openRouterKey, setOpenRouterKey] = useState('');
   const [finishing, setFinishing] = useState(false);
+  const [installingAddon, setInstallingAddon] = useState<QuickStartOption | null>(null);
+  const [quickStartError, setQuickStartError] = useState<string | null>(null);
+  const [selectedQuickStart, setSelectedQuickStart] = useState<QuickStartOption | 'skip' | null>(null);
 
   useEffect(() => {
     setSelectedService(selectedSyncService);
@@ -72,10 +110,17 @@ export default function Onboarding() {
 
   const isTraktConnected = connectedSyncService === 'trakt';
   const isSimklConnected = connectedSyncService === 'simkl';
+  const hasSecretQuickStart =
+    normalizeReferralCode(user?.user_metadata?.referralCode) === SECRET_REFERRAL_CODE ||
+    normalizeReferralCode(user?.user_metadata?.referalCode) === SECRET_REFERRAL_CODE;
   const selectedOption = syncServiceOptions.find((option) => option.id === selectedService) ?? null;
   const selectedServiceConnected = selectedService === 'trakt' ? isTraktConnected : selectedService === 'simkl' ? isSimklConnected : false;
   const joinHref = selectedService === 'trakt' ? 'https://trakt.tv/signup' : selectedService === 'simkl' ? 'https://simkl.com/signup' : null;
   const joinLabel = selectedService === 'trakt' ? 'Join Trakt for free' : selectedService === 'simkl' ? 'Join SIMKL for free' : null;
+  const selectedQuickStartOption =
+    selectedQuickStart && selectedQuickStart !== 'skip'
+      ? quickStartOptions.find((option) => option.id === selectedQuickStart) ?? null
+      : null;
 
   const handleSelectService = (service: SyncService) => {
     setSelectedService(service);
@@ -101,12 +146,52 @@ export default function Onboarding() {
     navigate('/dashboard');
   };
 
+  const handleOpenRouterContinue = async () => {
+    if (!connectedSyncService) {
+      return;
+    }
+
+    if (hasSecretQuickStart) {
+      setStep('quickstart');
+      return;
+    }
+
+    await handleComplete();
+  };
+
+  const handleQuickStartChoice = async (choice: QuickStartOption | 'skip') => {
+    setQuickStartError(null);
+    setSelectedQuickStart(choice);
+
+    if (choice === 'skip') {
+      setStep('addon-config');
+      return;
+    }
+
+    const option = quickStartOptions.find((item) => item.id === choice);
+
+    if (!option?.addonUrl) {
+      setQuickStartError(`Set VITE_ONBOARDING_${choice.toUpperCase()}_ADDON_URL to enable this quick start.`);
+      return;
+    }
+
+    try {
+      setInstallingAddon(choice);
+      await addAddon(option.addonUrl);
+      setStep('addon-config');
+    } catch (error) {
+      setQuickStartError(mapSupabaseError(error, `Failed to install the ${option.title} addon.`));
+    } finally {
+      setInstallingAddon(null);
+    }
+  };
+
   return (
     <div className="w-full space-y-8 rounded-lg border border-stone-800 bg-stone-900 p-8 shadow-sm sm:p-10">
       {step === 'service' ? (
         <div className="space-y-8">
           <div className="space-y-2 text-center sm:text-left">
-            <p className="text-xs font-medium text-stone-400">Step 1 of 2</p>
+            <p className="text-xs font-medium text-stone-400">Step 1 of {hasSecretQuickStart ? '4' : '2'}</p>
             <h1 className="text-2xl font-bold tracking-tight text-white">Connect your sync service</h1>
           </div>
 
@@ -211,10 +296,10 @@ export default function Onboarding() {
             </div>
           </div>
         </div>
-      ) : (
+      ) : step === 'openrouter' ? (
         <div className="space-y-8">
           <div className="space-y-2 text-center sm:text-left">
-            <p className="text-xs font-medium text-stone-400">Step 2 of 2</p>
+            <p className="text-xs font-medium text-stone-400">Step 2 of {hasSecretQuickStart ? '4' : '2'}</p>
             <h1 className="text-2xl font-bold tracking-tight text-white">Turn on AI discovery</h1>
             <p className="text-base text-stone-400">
               Connect OpenRouter to unlock AI insights, better search, and personal recommendations.
@@ -287,19 +372,141 @@ export default function Onboarding() {
           <div className="flex flex-col gap-4">
             <Button
               onClick={() => {
-                void handleComplete();
+                void handleOpenRouterContinue();
               }}
               isLoading={finishing}
               disabled={!connectedSyncService}
               className="h-12 w-full text-base font-bold"
             >
-              Finish setup
+              {hasSecretQuickStart ? 'Continue to quick start' : 'Finish setup'}
             </Button>
             <button
               onClick={() => setStep('service')}
               className="text-sm font-medium text-stone-500 transition hover:text-white"
             >
               Back to sync service
+            </button>
+          </div>
+        </div>
+      ) : step === 'quickstart' ? (
+        <div className="space-y-8">
+          <div className="space-y-2 text-center sm:text-left">
+            <p className="text-xs font-medium text-stone-400">Step 3 of 4</p>
+            <h1 className="text-2xl font-bold tracking-tight text-white">Unlock your quick start</h1>
+            <p className="text-base text-stone-400">
+              Because you joined with the `epic55` referral code, you can jump ahead with one starter addon.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {quickStartOptions.map((option) => {
+              const Icon = option.icon;
+              const isInstalling = installingAddon === option.id;
+
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => {
+                    void handleQuickStartChoice(option.id);
+                  }}
+                  disabled={installingAddon !== null}
+                  className="flex flex-col gap-4 rounded-lg border border-stone-800 bg-stone-900/50 p-5 text-left transition hover:border-stone-700 hover:bg-stone-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-stone-800 bg-stone-800 text-white">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <span className="text-xs font-medium uppercase tracking-[0.2em] text-stone-500">Quick start</span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h2 className="text-lg font-bold text-white">{option.title}</h2>
+                    <p className="text-sm leading-relaxed text-stone-400">{option.description}</p>
+                  </div>
+
+                  <div className="inline-flex items-center gap-2 text-sm font-medium text-stone-300">
+                    <CheckCircle2 className="h-4 w-4" />
+                    {isInstalling ? 'Installing addon...' : 'Install 1 addon'}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {quickStartError ? (
+            <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-300">
+              {quickStartError}
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-4 sm:flex-row">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                void handleQuickStartChoice('skip');
+              }}
+              disabled={installingAddon !== null}
+              className="h-12 flex-1 text-base font-semibold"
+            >
+              Skip for now
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setStep('openrouter')}
+              disabled={installingAddon !== null}
+              className="h-12 px-0 text-sm font-medium text-stone-500 hover:bg-transparent hover:text-white"
+            >
+              Back to OpenRouter
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-8">
+          <div className="space-y-2 text-center sm:text-left">
+            <p className="text-xs font-medium text-stone-400">Step 4 of 4</p>
+            <h1 className="text-2xl font-bold tracking-tight text-white">Addon configuration</h1>
+            <p className="text-base text-stone-400">
+              This page is intentionally blank for now. We will add addon configuration here next.
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-stone-800 bg-stone-900/50 p-6 sm:p-7">
+            <div className="space-y-3">
+              <p className="text-xs font-medium uppercase tracking-[0.2em] text-stone-500">Current state</p>
+              <h2 className="text-xl font-bold text-white">
+                {selectedQuickStartOption
+                  ? `${selectedQuickStartOption.title} addon installed`
+                  : selectedQuickStart === 'skip'
+                    ? 'No addon installed yet'
+                    : 'Waiting on addon setup'}
+              </h2>
+              <p className="text-sm leading-relaxed text-stone-400">
+                {selectedQuickStartOption
+                  ? 'Your quick start addon is installed. The next iteration can add its editable configuration controls here.'
+                  : selectedQuickStart === 'skip'
+                    ? 'You skipped the quick start install. You can still add and manage addons later from the dashboard.'
+                    : 'Choose a quick start option first, then come back here for addon configuration.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <Button
+              onClick={() => {
+                void handleComplete();
+              }}
+              isLoading={finishing}
+              disabled={selectedQuickStart === null}
+              className="h-12 w-full text-base font-bold"
+            >
+              Finish setup
+            </Button>
+            <button
+              onClick={() => setStep('quickstart')}
+              className="text-sm font-medium text-stone-500 transition hover:text-white"
+            >
+              Back to quick start
             </button>
           </div>
         </div>

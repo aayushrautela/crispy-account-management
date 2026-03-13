@@ -44,9 +44,13 @@ VITE_SIMKL_REDIRECT_URI=http://localhost:5173/auth/connect/simkl
 VITE_DOWNLOAD_URL_WINDOWS=
 VITE_DOWNLOAD_URL_ANDROID=
 VITE_DOWNLOAD_URL_LINUX=
+VITE_ONBOARDING_TORRENT_ADDON_URL=
+VITE_ONBOARDING_HTTPS_ADDON_URL=
 ```
 
 Optional download URLs power the **Get the app** page. If unset, the UI shows "Coming soon".
+
+The onboarding quick-start URLs are optional too. When set, the hidden `epic55` referral flow can install one addon for the Torrent or HTTPS path.
 
 Provider auth setup:
 
