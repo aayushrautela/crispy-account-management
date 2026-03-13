@@ -135,8 +135,10 @@ export default function AccountSettings() {
         <form onSubmit={handleUpdateEmail} className="space-y-4 border-t border-stone-800/50 pt-4">
           <Input
             id="new-email"
+            name="newEmail"
             label="New Email Address"
             type="email"
+            autoComplete="email"
             placeholder="you@example.com"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
@@ -180,8 +182,10 @@ export default function AccountSettings() {
         <form onSubmit={handleUpdatePassword} className="space-y-4 border-t border-stone-800/50 pt-4">
           <Input
             id="new-password"
+            name="newPassword"
             label="New Password"
             type="password"
+            autoComplete="new-password"
             placeholder="At least 8 characters"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
@@ -190,8 +194,10 @@ export default function AccountSettings() {
           />
           <Input
             id="confirm-password"
+            name="confirmPassword"
             label="Confirm Password"
             type="password"
+            autoComplete="new-password"
             placeholder="Repeat your password"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
@@ -275,7 +281,9 @@ export default function AccountSettings() {
 
           <Input
             id="delete-confirmation"
+            name="deleteConfirmation"
             label="Confirmation"
+            autoComplete="off"
             placeholder="DELETE"
             value={deleteConfirmation}
             onChange={(event) => setDeleteConfirmation(event.target.value)}

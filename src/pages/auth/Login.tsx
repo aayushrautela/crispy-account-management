@@ -40,7 +40,9 @@ export default function Login() {
       <form onSubmit={handleSubmit} className="space-y-5">
         <Input
           id="email"
+          name="email"
           type="email"
+          autoComplete="username"
           label="Email"
           placeholder="you@example.com"
           value={formData.email}
@@ -51,7 +53,9 @@ export default function Login() {
         <div className="space-y-1">
           <Input
             id="password"
+            name="password"
             type="password"
+            autoComplete="current-password"
             label="Password"
             placeholder="••••••••"
             value={formData.password}

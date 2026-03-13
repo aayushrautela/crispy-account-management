@@ -204,7 +204,9 @@ export default function Onboarding() {
           <div className="space-y-6">
             <Input
               id="openRouterKey"
+              name="openRouterKey"
               type="password"
+              autoComplete="off"
               label="OpenRouter Key"
               placeholder="sk-or-v1-..."
               value={openRouterKey}

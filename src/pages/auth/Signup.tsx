@@ -84,7 +84,9 @@ export default function Signup() {
       <form onSubmit={handleSubmit} className="space-y-5">
         <Input
           id="email"
+          name="email"
           type="email"
+          autoComplete="email"
           label="Email address"
           placeholder="you@example.com"
           value={formData.email}
@@ -94,7 +96,9 @@ export default function Signup() {
         />
         <Input
           id="password"
+          name="password"
           type="password"
+          autoComplete="new-password"
           label="Password"
           placeholder="At least 8 characters"
           value={formData.password}
@@ -105,7 +109,9 @@ export default function Signup() {
         />
         <Input
           id="confirmPassword"
+          name="confirmPassword"
           type="password"
+          autoComplete="new-password"
           label="Confirm password"
           placeholder="Repeat your password"
           value={formData.confirmPassword}

@@ -105,6 +105,7 @@ function parseSettings(value: unknown): OnboardingSettingsRecord {
   let onboarding: OnboardingSettingsRecord['onboarding'];
 
   if (isRecord(value.onboarding)) {
+    // Legacy nested format (should no longer be written)
     const selectedService = parseSyncService(value.onboarding.selectedService);
 
     onboarding = {
@@ -112,13 +113,28 @@ function parseSettings(value: unknown): OnboardingSettingsRecord {
       ...(typeof value.onboarding.completedAt === 'string' ? { completedAt: value.onboarding.completedAt } : {}),
       ...(typeof value.onboarding.updatedAt === 'string' ? { updatedAt: value.onboarding.updatedAt } : {}),
     };
+  } else {
+    // Flat string-map format (current)
+    const selectedService = parseSyncService(value['onboarding.selectedService']);
+
+    onboarding = {
+      ...(selectedService ? { selectedService } : {}),
+      ...(typeof value['onboarding.completedAt'] === 'string'
+        ? { completedAt: value['onboarding.completedAt'] as string }
+        : {}),
+      ...(typeof value['onboarding.updatedAt'] === 'string'
+        ? { updatedAt: value['onboarding.updatedAt'] as string }
+        : {}),
+    };
   }
 
   const openRouter = isRecord(value.openRouter)
     ? {
         configuredAt: typeof value.openRouter.configuredAt === 'string' ? value.openRouter.configuredAt : undefined,
       }
-    : undefined;
+    : typeof value['openRouter.configuredAt'] === 'string'
+      ? { configuredAt: value['openRouter.configuredAt'] as string }
+      : undefined;
 
   return {
     ...(parseSyncService(value.syncProvider) ? { syncProvider: parseSyncService(value.syncProvider) ?? undefined } : {}),
@@ -134,6 +150,21 @@ function hasProviderToken(value: unknown): boolean {
 
   const accessToken = value.accessToken;
   return typeof accessToken === 'string' && accessToken.length > 0;
+}
+
+/**
+ * Convert a ProviderAuthPayload into a flat Record<string, string>
+ * that satisfies the is_string_map() CHECK constraint on profile_data columns.
+ */
+function serializeAuthPayload(payload: ProviderAuthPayload): Record<string, string> {
+  const map: Record<string, string> = {};
+  if (payload.accessToken) map.accessToken = payload.accessToken;
+  if (payload.refreshToken) map.refreshToken = payload.refreshToken;
+  if (payload.expiresAt) map.expiresAt = payload.expiresAt;
+  map.updatedAt = String(Date.now());
+  if (payload.providerUsername) map.userHandle = payload.providerUsername;
+  if (payload.providerUserId) map.providerUserId = payload.providerUserId;
+  return map;
 }
 
 function sanitizeReturnTo(value: string | undefined): string | null {
@@ -243,8 +274,8 @@ async function saveProfileData(
     {
       profile_id: profileId,
       settings: updates.settings ?? existingRow?.settings ?? {},
-      trakt_auth: updates.trakt_auth ?? existingRow?.trakt_auth ?? null,
-      simkl_auth: updates.simkl_auth ?? existingRow?.simkl_auth ?? null,
+      trakt_auth: updates.trakt_auth ?? existingRow?.trakt_auth ?? {},
+      simkl_auth: updates.simkl_auth ?? existingRow?.simkl_auth ?? {},
     },
     { onConflict: 'profile_id' },
   );
@@ -254,20 +285,26 @@ async function saveProfileData(
   }
 }
 
-function mergeSettings(base: unknown, service: SyncService, markComplete = false): OnboardingSettingsRecord {
-  const currentSettings = parseSettings(base);
+function mergeSettings(base: unknown, service: SyncService, markComplete = false): Record<string, string> {
+  // Preserve existing flat string-map entries
+  const map: Record<string, string> = {};
+  if (isRecord(base)) {
+    for (const [k, v] of Object.entries(base)) {
+      if (typeof v === 'string') map[k] = v;
+    }
+  }
+
   const now = new Date().toISOString();
 
-  return {
-    ...currentSettings,
-    syncProvider: service,
-    onboarding: {
-      ...currentSettings.onboarding,
-      selectedService: service,
-      completedAt: markComplete ? currentSettings.onboarding?.completedAt ?? now : currentSettings.onboarding?.completedAt,
-      updatedAt: now,
-    },
-  };
+  map.syncProvider = service;
+  map['onboarding.selectedService'] = service;
+  map['onboarding.updatedAt'] = now;
+
+  if (markComplete && !map['onboarding.completedAt']) {
+    map['onboarding.completedAt'] = now;
+  }
+
+  return map;
 }
 
 export async function getOnboardingState(context: OnboardingContext): Promise<OnboardingState> {
@@ -320,11 +357,12 @@ export async function saveProviderAuthForProfile(
   payload: ProviderAuthPayload,
 ): Promise<OnboardingState> {
   const row = await loadProfileData(profileId);
+  const serializedAuth = serializeAuthPayload(payload);
 
   await saveProfileData(profileId, {
     settings: mergeSettings(row?.settings, service, true),
-    trakt_auth: service === 'trakt' ? payload : row?.trakt_auth,
-    simkl_auth: service === 'simkl' ? payload : row?.simkl_auth,
+    trakt_auth: service === 'trakt' ? serializedAuth : row?.trakt_auth,
+    simkl_auth: service === 'simkl' ? serializedAuth : row?.simkl_auth,
   });
 
   return getProfileOnboardingState(profileId);
