@@ -75,11 +75,11 @@ export default function AuthLayout() {
                 <div className="max-w-2xl space-y-6">
                   <div className="space-y-4">
                     <h1 className="text-3xl font-bold text-white sm:text-4xl lg:text-5xl lg:leading-[1.1]">
-                      Bring your lists and AI setup together.
+                      All your media in one place. Curated by AI.
                     </h1>
                     <p className="max-w-lg text-base leading-relaxed text-stone-300">
-                      Create your Crispy tv account, pick Trakt or SIMKL, then add an OpenRouter key if you want AI-powered
-                      recommendations.
+                      A fully free, open-source media hub available across all your devices. Featuring native Trakt and
+                      SIMKL integration alongside powerful, highly personalized AI recommendations.
                     </p>
                   </div>
                 </div>
