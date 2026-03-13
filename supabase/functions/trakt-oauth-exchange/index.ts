@@ -68,6 +68,7 @@ Deno.serve(async (req) => {
 
   try {
     const clientId = readRequiredEnv('TRAKT_CLIENT_ID');
+    const clientSecret = readRequiredEnv('TRAKT_CLIENT_SECRET');
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     const code = typeof body?.code === 'string' ? body.code.trim() : '';
     const codeVerifier = typeof body?.codeVerifier === 'string' ? body.codeVerifier.trim() : '';
@@ -87,6 +88,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         code,
         client_id: clientId,
+        client_secret: clientSecret,
         code_verifier: codeVerifier,
         redirect_uri: redirectUri,
         grant_type: 'authorization_code',

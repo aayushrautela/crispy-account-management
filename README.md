@@ -77,6 +77,11 @@ This app expects these deployed Supabase Edge Functions:
 - `SIMKL_CLIENT_ID`
 - `SIMKL_CLIENT_SECRET`
 
+`trakt-oauth-exchange` must be deployed with these Supabase Edge Function secrets:
+
+- `TRAKT_CLIENT_ID`
+- `TRAKT_CLIENT_SECRET`
+
 ## Development
 
 ```bash

@@ -504,7 +504,9 @@ async function exchangeTraktCode(
   }
 
   if (!isRecord(data) || typeof data.access_token !== 'string') {
-    throw new Error('Trakt authorization returned an invalid response.');
+    const serverMessage =
+      isRecord(data) && typeof data.error === 'string' ? data.error : null;
+    throw new Error(serverMessage ?? 'Trakt authorization returned an invalid response.');
   }
 
   return data as TraktOAuthExchangeResponse;
@@ -611,7 +613,9 @@ async function exchangeSimklCode(code: string, redirectUri: string): Promise<Sim
   }
 
   if (!isRecord(data) || typeof data.access_token !== 'string') {
-    throw new Error('SIMKL authorization returned an invalid response.');
+    const serverMessage =
+      isRecord(data) && typeof data.error === 'string' ? data.error : null;
+    throw new Error(serverMessage ?? 'SIMKL authorization returned an invalid response.');
   }
 
   return data as SimklOAuthExchangeResponse;
