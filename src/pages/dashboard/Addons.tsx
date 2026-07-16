@@ -6,7 +6,7 @@ import { Card } from '../../components/ui/Card';
 import { Skeleton } from '../../components/ui/Skeleton';
 import {
   addAddon,
-  getHouseholdAddons,
+  getAccountAddons,
   removeAddon,
   toggleAddon,
   type Addon,
@@ -207,7 +207,7 @@ export default function Addons() {
     }
 
     try {
-      const data = await getHouseholdAddons();
+      const data = await getAccountAddons();
       setAddons(data);
     } catch (error) {
       setMessage({ type: 'error', text: mapSupabaseError(error, 'Failed to load addons.') });
@@ -290,7 +290,7 @@ export default function Addons() {
       <div className="flex flex-col gap-4 border-b border-stone-800 pb-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-xl font-medium text-white">Addons</h1>
-          <p className="text-sm text-stone-500">Install and manage household addons.</p>
+          <p className="text-sm text-stone-500">Install and manage your addons.</p>
         </div>
 
         {isRefreshing ? (

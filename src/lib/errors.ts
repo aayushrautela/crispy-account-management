@@ -33,7 +33,7 @@ export function mapSupabaseError(error: unknown, fallback = 'Request failed.'): 
 
     if (maybeCode === UNIQUE_VIOLATION) {
       if (maybeMessage.toLowerCase().includes('lower')) {
-        return 'A profile with this name already exists in your household.';
+        return 'A profile with this name already exists on your account.';
       }
 
       return 'This value must be unique. Please choose another one.';

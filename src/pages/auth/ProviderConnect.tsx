@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ExternalLink, Loader2, ShieldCheck } from 'lucide-react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import simklLogo from '../../assets/brands/simkl.svg';
@@ -9,14 +9,8 @@ import {
   beginSimklAuth,
   beginTraktAuth,
   clearPendingProviderAuth,
-  type CompletedProviderAuthResult,
-  completeSimklAuthCallback,
-  completeTraktAuthCallback,
-  saveProviderAuth,
-  saveProviderAuthForProfile,
   type SyncService,
 } from '../../services/onboardingService';
-import { useAuthStore } from '../../store/useAuthStore';
 
 const providerConfig = {
   trakt: {
@@ -47,7 +41,6 @@ export default function ProviderConnect() {
   const navigate = useNavigate();
   const { provider: routeProvider } = useParams();
   const [searchParams] = useSearchParams();
-  const { user, householdId, refreshOnboarding } = useAuthStore();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(false);
@@ -58,40 +51,10 @@ export default function ProviderConnect() {
   const targetProfileId = searchParams.get('targetProfileId')?.trim() || null;
   const returnTo = normalizeReturnTo(searchParams.get('returnTo'));
   const callbackQuery = searchParams.toString();
-  const callbackSearchParams = useMemo(() => new URLSearchParams(callbackQuery), [callbackQuery]);
-  const hasCallbackPayload = callbackSearchParams.has('code') || callbackSearchParams.has('error');
-  const onboardingContext = useMemo(() => {
-    if (!user || !householdId) {
-      return null;
-    }
-
-    return {
-      householdId,
-      userId: user.id,
-    };
-  }, [householdId, user]);
-  const latestConnectionStateRef = useRef({
-    onboardingContext,
-    targetProfileId,
-    returnTo,
-  });
-  const requiresOnboardingContext = !targetProfileId;
-  const canFinalizeConnection = !requiresOnboardingContext || onboardingContext !== null;
-
-  useEffect(() => {
-    latestConnectionStateRef.current = {
-      onboardingContext,
-      targetProfileId,
-      returnTo,
-    };
-  }, [onboardingContext, returnTo, targetProfileId]);
-
   const config = provider ? providerConfig[provider] : null;
   const backLabel = returnTo === '/dashboard' ? 'Back to profiles' : 'Back to onboarding';
-  const loadingTitle = hasCallbackPayload ? `Finalizing ${config?.name ?? 'provider'} connection` : config?.loadingTitle ?? 'Connecting provider';
-  const loadingBody = hasCallbackPayload
-    ? `Crispy tv is securely saving your ${config?.name ?? 'provider'} authorization and preparing the next step.`
-    : config?.loadingBody ?? 'Starting provider authorization.';
+  const loadingTitle = config?.loadingTitle ?? 'Connecting provider';
+  const loadingBody = config?.loadingBody ?? 'Starting provider authorization.';
   const retryPath = useMemo(() => {
     if (!provider) {
       return returnTo;
@@ -115,32 +78,6 @@ export default function ProviderConnect() {
     return buildFlowKey(provider, callbackQuery, targetProfileId, returnTo);
   }, [callbackQuery, provider, returnTo, targetProfileId]);
 
-  const finishConnection = useCallback(
-    async (service: SyncService, result: CompletedProviderAuthResult) => {
-      const {
-        onboardingContext: currentOnboardingContext,
-        targetProfileId: currentTargetProfileId,
-        returnTo: currentReturnTo,
-      } = latestConnectionStateRef.current;
-      const resolvedTargetProfileId = result.targetProfileId ?? currentTargetProfileId;
-
-      if (resolvedTargetProfileId) {
-        await saveProviderAuthForProfile(resolvedTargetProfileId, service, result.auth);
-      } else {
-        if (!currentOnboardingContext) {
-          throw new Error('Account context is not ready yet.');
-        }
-
-        await saveProviderAuth(currentOnboardingContext, service, result.auth);
-      }
-
-      clearPendingProviderAuth();
-      await refreshOnboarding();
-      navigate(result.returnTo ?? currentReturnTo, { replace: true });
-    },
-    [navigate, refreshOnboarding],
-  );
-
   useEffect(() => {
     mountedRef.current = true;
 
@@ -151,10 +88,6 @@ export default function ProviderConnect() {
 
   useEffect(() => {
     if (!provider || !flowKey) {
-      return;
-    }
-
-    if (hasCallbackPayload && !canFinalizeConnection) {
       return;
     }
 
@@ -171,28 +104,6 @@ export default function ProviderConnect() {
         setBusy(true);
         setError(null);
 
-        if (provider === 'trakt' && hasCallbackPayload) {
-          const result = await completeTraktAuthCallback(callbackSearchParams);
-
-          if (!mountedRef.current || activeRunIdRef.current !== runId) {
-            return;
-          }
-
-          await finishConnection('trakt', result);
-          return;
-        }
-
-        if (provider === 'simkl' && hasCallbackPayload) {
-          const result = await completeSimklAuthCallback(callbackSearchParams);
-
-          if (!mountedRef.current || activeRunIdRef.current !== runId) {
-            return;
-          }
-
-          await finishConnection('simkl', result);
-          return;
-        }
-
         if (provider === 'trakt') {
           await beginTraktAuth({
             targetProfileId: targetProfileId ?? undefined,
@@ -206,9 +117,7 @@ export default function ProviderConnect() {
           returnTo,
         });
       } catch (nextError) {
-        if (!hasCallbackPayload) {
-          clearPendingProviderAuth();
-        }
+        clearPendingProviderAuth();
 
         if (mountedRef.current && activeRunIdRef.current === runId) {
           startedFlowKeyRef.current = null;
@@ -217,7 +126,7 @@ export default function ProviderConnect() {
         }
       }
     })();
-  }, [callbackSearchParams, canFinalizeConnection, finishConnection, flowKey, hasCallbackPayload, provider, returnTo, targetProfileId]);
+  }, [flowKey, provider, returnTo, targetProfileId]);
 
   const handleCancel = () => {
     clearPendingProviderAuth();

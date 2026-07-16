@@ -1,8 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { mapSupabaseError } from '../lib/errors';
 import { emailSchema, passwordSchema } from '../contracts';
-
-const DELETE_ACCOUNT_FUNCTION = 'delete-account';
+import { apiRequest } from '../lib/apiClient';
 
 export async function updateUserEmail(email: string): Promise<void> {
   const parsedEmail = emailSchema.parse(email);
@@ -23,11 +22,7 @@ export async function updateUserPassword(password: string): Promise<void> {
 }
 
 export async function deleteCurrentAccount(): Promise<void> {
-  const { error } = await supabase.functions.invoke(DELETE_ACCOUNT_FUNCTION, {
-    body: {},
+  await apiRequest('/v1/account', {
+    method: 'DELETE',
   });
-
-  if (error) {
-    throw new Error(mapSupabaseError(error, 'Failed to delete account.'));
-  }
 }

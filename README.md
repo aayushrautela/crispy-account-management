@@ -1,34 +1,28 @@
 # Crispy Account Management
 
-Household-aware account portal for Crispy. This app manages authentication, profiles, and account security against the updated Supabase schema.
-
-## What changed
-
-- Migrated from legacy account-scoped profile access to household-scoped access (`household_id`).
-- Added household bootstrap flow using `ensure_household_membership`.
-- Added a shared contract package from npm (`@crispy-streaming/supabase-contract`).
-- Refactored Supabase writes into service modules with shared validation and error mapping.
-- Replaced simulated account deletion with Edge Function invocation (`delete-account`).
-- Added CI checks (`lint`, `test`, `build`) and baseline unit tests.
+Account portal for Crispy. This app manages authentication, profiles, and account security. It talks to **crispy-server** over its REST API using the Supabase-issued JWT as a bearer token.
 
 ## Architecture
 
 - **Frontend**: React 19 + Vite + TypeScript
 - **State**: Zustand (`src/store/useAuthStore.ts`)
+- **Auth**: Supabase Auth (email/password), session persisted by the Supabase client
+- **API client**: `src/lib/apiClient.ts` — wraps `fetch` with the Supabase session JWT and unwraps the server's `{ data, meta }` envelope
 - **Data layer**: service modules in `src/services/`
-- **Contract**: `@crispy-streaming/supabase-contract` package with typed tables/RPCs and Zod validators
-- **Backend**: Supabase Auth + Postgres + Storage + Edge Functions
+- **Backend**: crispy-server REST API (`/v1/*`) + Supabase Auth + Supabase Storage (avatars only)
 
-## Required Supabase contract
+### Auth + API flow
 
-This app assumes the updated schema with:
+1. User signs in with email/password via Supabase Auth (`src/services/authService.ts`).
+2. On session restore, `useAuthStore` calls `GET /v1/me` to load the account id, settings, and profiles.
+3. All subsequent calls send `Authorization: Bearer <supabase-jwt>` and hit crispy-server routes:
+   - `GET /v1/me`
+   - `GET /v1/profiles`, `POST /v1/profiles`, `PATCH /v1/profiles/:id`
+   - `GET /v1/profiles/:id/settings`, `PATCH /v1/profiles/:id/settings`
+   - `GET /v1/profiles/:id/import-connections`, `POST /v1/profiles/:id/imports/start`
+   - `GET /v1/account/settings`, `PATCH /v1/account/settings`, `DELETE /v1/account`
 
-- `public.households`
-- `public.household_members`
-- `public.profiles`
-- `public.profile_data`
-- `public.addons`
-- RPC: `ensure_household_membership`
+Provider (Trakt/SIMKL) OAuth is fully server-side: `beginTraktAuth`/`beginSimklAuth` POSTs to `/v1/profiles/:id/imports/start` with `action: 'connect'`, and the server returns an `authUrl` that the browser is redirected to. The server owns the OAuth callback and secrets.
 
 ## Environment variables
 
@@ -37,10 +31,7 @@ Create `.env` in repo root:
 ```env
 VITE_SUPABASE_URL=
 VITE_SUPABASE_ANON_KEY=
-VITE_TRAKT_CLIENT_ID=
-VITE_TRAKT_REDIRECT_URI=http://localhost:5173/auth/connect/trakt
-VITE_SIMKL_CLIENT_ID=
-VITE_SIMKL_REDIRECT_URI=http://localhost:5173/auth/connect/simkl
+VITE_CRISPY_API_URL=http://localhost:3100
 VITE_DOWNLOAD_URL_WINDOWS=
 VITE_DOWNLOAD_URL_ANDROID=
 VITE_DOWNLOAD_URL_LINUX=
@@ -48,39 +39,9 @@ VITE_ONBOARDING_TORRENT_ADDON_URL=
 VITE_ONBOARDING_HTTPS_ADDON_URL=
 ```
 
-Optional download URLs power the **Get the app** page. If unset, the UI shows "Coming soon".
-
-The onboarding quick-start URLs are optional too. When set, the hidden `epic55` referral flow can install one addon for the Torrent or HTTPS path.
-
-Provider auth setup:
-
-- Register a Trakt app and allow the same redirect URI you set in `VITE_TRAKT_REDIRECT_URI`
-- Register a SIMKL app, copy its client id into `VITE_SIMKL_CLIENT_ID`, and set the callback URL to `https://account.crispytv.tech/auth/connect/simkl` in production
-- Optionally set `VITE_SIMKL_REDIRECT_URI` when you need a non-default callback; otherwise the app uses `${window.location.origin}/auth/connect/simkl`
-- Trakt returns to `/auth/connect/trakt`
-- SIMKL now uses the standard OAuth code flow on `/auth/connect/simkl` instead of the PIN flow
-
-## Edge function dependency
-
-This app expects these deployed Supabase Edge Functions:
-
-- `delete-account`
-- `trakt-oauth-exchange`
-- `simkl-oauth-exchange`
-
-- `delete-account` should perform authenticated user deletion server-side (service role) and cascade according to your database policies.
-- `trakt-oauth-exchange` should exchange the Trakt authorization code server-side and fetch user profile info.
-- `simkl-oauth-exchange` should exchange the SIMKL authorization code server-side so the client secret never ships to the browser.
-
-`simkl-oauth-exchange` must be deployed with these Supabase Edge Function secrets:
-
-- `SIMKL_CLIENT_ID`
-- `SIMKL_CLIENT_SECRET`
-
-`trakt-oauth-exchange` must be deployed with these Supabase Edge Function secrets:
-
-- `TRAKT_CLIENT_ID`
-- `TRAKT_CLIENT_SECRET`
+- `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` — Supabase project for auth and avatar storage.
+- `VITE_CRISPY_API_URL` — **required.** Base URL of crispy-server's REST API. There is no fallback.
+- Optional download/onboarding URLs power their respective pages. If unset, the UI shows "Coming soon".
 
 ## Development
 
@@ -102,11 +63,8 @@ npm run ci
 
 ## Key folders
 
-- `src/services/`: auth/account/profile/household APIs
-- `src/store/`: session + household bootstrap state
+- `src/services/`: auth/account/profile/onboarding APIs
+- `src/store/`: session + account bootstrap state
+- `src/lib/`: `apiClient` (fetch wrapper), `supabase` (auth/storage client), `storage` (local persistence), `avatar`
 - `src/pages/`: auth and dashboard routes
 - `src/components/`: shared UI and feature forms
-
-## Contract dependency
-
-`@crispy-streaming/supabase-contract` is consumed from npm (see `package.json`).

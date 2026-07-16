@@ -1,46 +1,23 @@
 import { supabase } from './supabase';
 
-const ACTIVE_HOUSEHOLD_KEY = 'crispy.active-household-id';
-const ACTIVE_PROFILE_PREFIX = 'crispy.active-profile';
+const ACTIVE_PROFILE_KEY = 'crispy.active-profile-id';
 const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024;
 
-function activeProfileKey(householdId: string): string {
-  return `${ACTIVE_PROFILE_PREFIX}:${householdId}`;
-}
-
 export const StorageService = {
-  setActiveHouseholdId(householdId: string): void {
-    localStorage.setItem(ACTIVE_HOUSEHOLD_KEY, householdId);
+  setActiveProfileId(profileId: string): void {
+    localStorage.setItem(ACTIVE_PROFILE_KEY, profileId);
   },
 
-  getActiveHouseholdId(): string | null {
-    return localStorage.getItem(ACTIVE_HOUSEHOLD_KEY);
+  getActiveProfileId(): string | null {
+    return localStorage.getItem(ACTIVE_PROFILE_KEY);
   },
 
-  clearActiveHouseholdId(): void {
-    localStorage.removeItem(ACTIVE_HOUSEHOLD_KEY);
-  },
-
-  setActiveProfileId(householdId: string, profileId: string): void {
-    localStorage.setItem(activeProfileKey(householdId), profileId);
-  },
-
-  getActiveProfileId(householdId: string): string | null {
-    return localStorage.getItem(activeProfileKey(householdId));
-  },
-
-  clearActiveProfileId(householdId: string): void {
-    localStorage.removeItem(activeProfileKey(householdId));
+  clearActiveProfileId(): void {
+    localStorage.removeItem(ACTIVE_PROFILE_KEY);
   },
 
   clearAllSessionScope(): void {
-    const householdId = this.getActiveHouseholdId();
-
-    if (householdId) {
-      this.clearActiveProfileId(householdId);
-    }
-
-    this.clearActiveHouseholdId();
+    this.clearActiveProfileId();
   },
 };
 

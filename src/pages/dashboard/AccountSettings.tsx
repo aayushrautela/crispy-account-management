@@ -243,8 +243,7 @@ export default function AccountSettings() {
 
         <div className="space-y-4 rounded-lg border border-red-500/20 bg-red-500/5 p-5">
           <p className="text-sm text-stone-300">
-            Deleting your account removes your login and household access. If you are the last owner,
-            the household and related profile data are deleted too.
+            Deleting your account removes your login and related profile data.
           </p>
           <Button
             variant="danger"
@@ -272,8 +271,7 @@ export default function AccountSettings() {
           <div className="flex gap-3 rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-red-400">
             <AlertTriangle className="h-5 w-5 shrink-0" />
             <p className="text-sm">
-              This action cannot be undone. Shared households stay available to other members, but any
-              household you solely own is removed with its related data.
+              This action cannot be undone. Your account and its related profile data are removed.
             </p>
           </div>
 

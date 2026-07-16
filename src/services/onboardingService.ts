@@ -1,6 +1,5 @@
-import { mapSupabaseError } from '../lib/errors';
 import { StorageService } from '../lib/storage';
-import { supabase } from '../lib/supabase';
+import { jsonBody, apiRequest } from '../lib/apiClient';
 import type { Profile } from '../types';
 import { createProfile, getPrimaryProfile, listProfiles, sortProfilesByPrimaryRule } from './profileService';
 
@@ -19,18 +18,6 @@ interface OnboardingSettingsRecord {
   };
 }
 
-export interface ProviderAuthPayload {
-  accessToken: string;
-  refreshToken: string | null;
-  tokenType: string | null;
-  scope: string | null;
-  expiresAt: string | null;
-  connectedAt: string;
-  providerUserId: string | null;
-  providerUsername: string | null;
-  raw: Record<string, unknown>;
-}
-
 export interface OnboardingState {
   status: OnboardingStatus;
   profileId: string | null;
@@ -41,52 +28,41 @@ export interface OnboardingState {
   openRouterConfigured: boolean;
 }
 
-export interface OnboardingContext {
-  householdId: string;
-  userId: string;
-}
-
 export interface ProviderAuthIntent {
   targetProfileId?: string;
   returnTo?: string;
 }
 
-interface ProfileDataRow {
-  profile_id: string;
-  settings: unknown;
-  trakt_auth: unknown;
-  simkl_auth: unknown;
+interface ProviderState {
+  provider: SyncService;
+  connectionState: 'not_connected' | 'pending_authorization' | 'connected' | 'reauthorization_required';
+  accountStatus: string | null;
+  primaryAction: 'connect' | 'import' | 'reconnect';
+  canImport: boolean;
+  canReconnect: boolean;
+  canDisconnect: boolean;
+  externalUsername: string | null;
+  statusLabel: string;
+  statusMessage: string | null;
+  lastImportCompletedAt: string | null;
 }
 
-interface PendingTraktAuthSession {
-  provider: 'trakt';
-  state: string;
-  codeVerifier: string;
-  redirectUri: string;
-  targetProfileId: string | null;
-  returnTo: string | null;
-  createdAt: string;
+interface ProviderConnectionsResponse {
+  providerStates: ProviderState[];
+  watchDataState: unknown;
 }
 
-interface PendingSimklAuthSession {
-  provider: 'simkl';
-  state: string;
-  redirectUri: string;
-  targetProfileId: string | null;
-  returnTo: string | null;
-  createdAt: string;
+interface ProfileSettingsResponse {
+  settings: Record<string, unknown>;
 }
 
-export interface CompletedProviderAuthResult {
-  auth: ProviderAuthPayload;
-  targetProfileId: string | null;
-  returnTo: string | null;
+interface ProviderStartResponse {
+  authUrl: string | null;
+  nextAction: 'authorize_provider' | 'queued';
 }
 
 const DEFAULT_PROFILE_NAME = 'Main Profile';
 const PENDING_PROVIDER_AUTH_STORAGE_KEY = 'crispy.pending-provider-auth';
-const TRAKT_OAUTH_EXCHANGE_FUNCTION = 'trakt-oauth-exchange';
-const SIMKL_OAUTH_EXCHANGE_FUNCTION = 'simkl-oauth-exchange';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -101,31 +77,17 @@ function parseSettings(value: unknown): OnboardingSettingsRecord {
     return {};
   }
 
-  let onboarding: OnboardingSettingsRecord['onboarding'];
-
-  if (isRecord(value.onboarding)) {
-    // Legacy nested format (should no longer be written)
-    const selectedService = parseSyncService(value.onboarding.selectedService);
-
-    onboarding = {
-      ...(selectedService ? { selectedService } : {}),
-      ...(typeof value.onboarding.completedAt === 'string' ? { completedAt: value.onboarding.completedAt } : {}),
-      ...(typeof value.onboarding.updatedAt === 'string' ? { updatedAt: value.onboarding.updatedAt } : {}),
-    };
-  } else {
-    // Flat string-map format (current)
-    const selectedService = parseSyncService(value['onboarding.selectedService']);
-
-    onboarding = {
-      ...(selectedService ? { selectedService } : {}),
-      ...(typeof value['onboarding.completedAt'] === 'string'
-        ? { completedAt: value['onboarding.completedAt'] as string }
-        : {}),
-      ...(typeof value['onboarding.updatedAt'] === 'string'
-        ? { updatedAt: value['onboarding.updatedAt'] as string }
-        : {}),
-    };
-  }
+  const onboarding = isRecord(value.onboarding)
+    ? {
+        ...(parseSyncService(value.onboarding.selectedService) ? { selectedService: parseSyncService(value.onboarding.selectedService) ?? undefined } : {}),
+        ...(typeof value.onboarding.completedAt === 'string' ? { completedAt: value.onboarding.completedAt } : {}),
+        ...(typeof value.onboarding.updatedAt === 'string' ? { updatedAt: value.onboarding.updatedAt } : {}),
+      }
+    : {
+        ...(parseSyncService(value['onboarding.selectedService']) ? { selectedService: parseSyncService(value['onboarding.selectedService']) ?? undefined } : {}),
+        ...(typeof value['onboarding.completedAt'] === 'string' ? { completedAt: value['onboarding.completedAt'] as string } : {}),
+        ...(typeof value['onboarding.updatedAt'] === 'string' ? { updatedAt: value['onboarding.updatedAt'] as string } : {}),
+      };
 
   const openRouter = isRecord(value.openRouter)
     ? {
@@ -142,39 +104,6 @@ function parseSettings(value: unknown): OnboardingSettingsRecord {
   };
 }
 
-function hasProviderToken(value: unknown): boolean {
-  if (!isRecord(value)) {
-    return false;
-  }
-
-  const accessToken = value.accessToken;
-  return typeof accessToken === 'string' && accessToken.length > 0;
-}
-
-function hasOpenRouterKey(value: unknown): boolean {
-  if (!isRecord(value)) {
-    return false;
-  }
-
-  const apiKey = value['ai.openrouter_key'];
-  return typeof apiKey === 'string' && apiKey.trim().length > 0;
-}
-
-/**
- * Convert a ProviderAuthPayload into a flat Record<string, string>
- * that satisfies the is_string_map() CHECK constraint on profile_data columns.
- */
-function serializeAuthPayload(payload: ProviderAuthPayload): Record<string, string> {
-  const map: Record<string, string> = {};
-  if (payload.accessToken) map.accessToken = payload.accessToken;
-  if (payload.refreshToken) map.refreshToken = payload.refreshToken;
-  if (payload.expiresAt) map.expiresAt = payload.expiresAt;
-  map.updatedAt = String(Date.now());
-  if (payload.providerUsername) map.userHandle = payload.providerUsername;
-  if (payload.providerUserId) map.providerUserId = payload.providerUserId;
-  return map;
-}
-
 function sanitizeReturnTo(value: string | undefined): string | null {
   if (typeof value !== 'string') {
     return null;
@@ -184,11 +113,11 @@ function sanitizeReturnTo(value: string | undefined): string | null {
   return trimmed.startsWith('/') ? trimmed : null;
 }
 
-function buildOnboardingState(profileId: string | null, row: ProfileDataRow | null): OnboardingState {
-  const settings = parseSettings(row?.settings);
-  const selectedService = settings.onboarding?.selectedService ?? settings.syncProvider ?? null;
-  const traktConnected = hasProviderToken(row?.trakt_auth);
-  const simklConnected = hasProviderToken(row?.simkl_auth);
+function buildOnboardingState(profileId: string | null, settings: Record<string, unknown>, connections: ProviderConnectionsResponse | null): OnboardingState {
+  const parsedSettings = parseSettings(settings);
+  const selectedService = parsedSettings.onboarding?.selectedService ?? parsedSettings.syncProvider ?? null;
+  const traktConnected = connections?.providerStates.some((state) => state.provider === 'trakt' && state.connectionState === 'connected') ?? false;
+  const simklConnected = connections?.providerStates.some((state) => state.provider === 'simkl' && state.connectionState === 'connected') ?? false;
 
   let connectedService: SyncService | null = null;
 
@@ -209,96 +138,59 @@ function buildOnboardingState(profileId: string | null, row: ProfileDataRow | nu
     connectedService,
     traktConnected,
     simklConnected,
-    openRouterConfigured: Boolean(settings.openRouter?.configuredAt) || hasOpenRouterKey(row?.settings),
+    openRouterConfigured: Boolean(parsedSettings.openRouter?.configuredAt) || typeof settings['ai.openrouter_key'] === 'string',
   };
 }
 
-async function ensureOnboardingProfile(context: OnboardingContext): Promise<Profile> {
-  const profiles = await listProfiles(context.householdId);
-  const primaryProfile = await getPrimaryProfile(context.householdId, profiles);
+async function ensureOnboardingProfile(): Promise<Profile> {
+  const profiles = await listProfiles();
+  const primaryProfile = await getPrimaryProfile(profiles);
 
   if (primaryProfile) {
-    StorageService.setActiveProfileId(context.householdId, primaryProfile.id);
+    StorageService.setActiveProfileId(primaryProfile.id);
     return primaryProfile;
   }
 
   const sortedProfiles = sortProfilesByPrimaryRule(profiles);
 
   if (sortedProfiles[0]) {
-    StorageService.setActiveProfileId(context.householdId, sortedProfiles[0].id);
+    StorageService.setActiveProfileId(sortedProfiles[0].id);
     return sortedProfiles[0];
   }
 
   const profile = await createProfile({
-    householdId: context.householdId,
-    userId: context.userId,
     name: DEFAULT_PROFILE_NAME,
-    avatar: null,
+    avatarKey: null,
   });
 
-  StorageService.setActiveProfileId(context.householdId, profile.id);
+  StorageService.setActiveProfileId(profile.id);
   return profile;
 }
 
-async function loadProfileData(profileId: string): Promise<ProfileDataRow | null> {
-  const profileDataTable = supabase.from('profile_data') as never as {
-    select: (columns: string) => {
-      eq: (column: string, value: string) => {
-        maybeSingle: () => Promise<{ data: ProfileDataRow | null; error: unknown }>;
-      };
-    };
-  };
-
-  const { data, error } = await profileDataTable
-    .select('profile_id, settings, trakt_auth, simkl_auth')
-    .eq('profile_id', profileId)
-    .maybeSingle();
-
-  if (error) {
-    throw new Error(mapSupabaseError(error, 'Failed to load onboarding settings.'));
-  }
-
-  return data;
+async function loadProfileSettings(profileId: string): Promise<Record<string, unknown>> {
+  const data = await apiRequest<ProfileSettingsResponse>(`/v1/profiles/${encodeURIComponent(profileId)}/settings`);
+  return data.settings;
 }
 
-async function saveProfileData(
-  profileId: string,
-  updates: Partial<Pick<ProfileDataRow, 'settings' | 'trakt_auth' | 'simkl_auth'>>,
-): Promise<void> {
-  const existingRow = await loadProfileData(profileId);
-  const profileDataTable = supabase.from('profile_data') as never as {
-    upsert: (
-      values: {
-        profile_id: string;
-        settings: unknown;
-        trakt_auth: unknown;
-        simkl_auth: unknown;
-      },
-      options: { onConflict: string },
-    ) => Promise<{ error: unknown }>;
-  };
+async function patchProfileSettings(profileId: string, patch: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const data = await apiRequest<ProfileSettingsResponse>(`/v1/profiles/${encodeURIComponent(profileId)}/settings`, {
+    method: 'PATCH',
+    body: jsonBody(patch),
+  });
+  return data.settings;
+}
 
-  const { error } = await profileDataTable.upsert(
-    {
-      profile_id: profileId,
-      settings: updates.settings ?? existingRow?.settings ?? {},
-      trakt_auth: updates.trakt_auth ?? existingRow?.trakt_auth ?? {},
-      simkl_auth: updates.simkl_auth ?? existingRow?.simkl_auth ?? {},
-    },
-    { onConflict: 'profile_id' },
-  );
-
-  if (error) {
-    throw new Error(mapSupabaseError(error, 'Failed to save onboarding settings.'));
-  }
+async function loadProviderConnections(profileId: string): Promise<ProviderConnectionsResponse> {
+  return apiRequest<ProviderConnectionsResponse>(`/v1/profiles/${encodeURIComponent(profileId)}/import-connections`);
 }
 
 function mergeSettings(base: unknown, service: SyncService, markComplete = false): Record<string, string> {
-  // Preserve existing flat string-map entries
   const map: Record<string, string> = {};
   if (isRecord(base)) {
-    for (const [k, v] of Object.entries(base)) {
-      if (typeof v === 'string') map[k] = v;
+    for (const [key, value] of Object.entries(base)) {
+      if (typeof value === 'string') {
+        map[key] = value;
+      }
     }
   }
 
@@ -315,15 +207,17 @@ function mergeSettings(base: unknown, service: SyncService, markComplete = false
   return map;
 }
 
-export async function getOnboardingState(context: OnboardingContext): Promise<OnboardingState> {
-  const profile = await ensureOnboardingProfile(context);
-  const row = await loadProfileData(profile.id);
-  return buildOnboardingState(profile.id, row);
+export async function getOnboardingState(): Promise<OnboardingState> {
+  const profile = await ensureOnboardingProfile();
+  return getProfileOnboardingState(profile.id);
 }
 
 export async function getProfileOnboardingState(profileId: string): Promise<OnboardingState> {
-  const row = await loadProfileData(profileId);
-  return buildOnboardingState(profileId, row);
+  const [settings, connections] = await Promise.all([
+    loadProfileSettings(profileId),
+    loadProviderConnections(profileId).catch(() => null),
+  ]);
+  return buildOnboardingState(profileId, settings, connections);
 }
 
 export async function listProfileOnboardingStates(profileIds: string[]): Promise<Record<string, OnboardingState>> {
@@ -335,116 +229,59 @@ export async function listProfileOnboardingStates(profileIds: string[]): Promise
 }
 
 export async function setSelectedSyncService(
-  context: OnboardingContext,
   service: SyncService,
 ): Promise<OnboardingState> {
-  const profile = await ensureOnboardingProfile(context);
-  const row = await loadProfileData(profile.id);
+  const profile = await ensureOnboardingProfile();
+  const settings = await loadProfileSettings(profile.id);
 
-  await saveProfileData(profile.id, {
-    settings: mergeSettings(row?.settings, service),
-  });
+  await patchProfileSettings(profile.id, mergeSettings(settings, service));
 
-  return getOnboardingState(context);
+  return getOnboardingState();
 }
 
 export async function saveProviderAuth(
-  context: OnboardingContext,
   service: SyncService,
-  payload: ProviderAuthPayload,
 ): Promise<OnboardingState> {
-  const profile = await ensureOnboardingProfile(context);
-  await saveProviderAuthForProfile(profile.id, service, payload);
+  const profile = await ensureOnboardingProfile();
+  await saveProviderAuthForProfile(profile.id, service);
 
-  return getOnboardingState(context);
+  return getOnboardingState();
 }
 
 export async function saveProviderAuthForProfile(
   profileId: string,
   service: SyncService,
-  payload: ProviderAuthPayload,
 ): Promise<OnboardingState> {
-  const row = await loadProfileData(profileId);
-  const serializedAuth = serializeAuthPayload(payload);
-
-  await saveProfileData(profileId, {
-    settings: mergeSettings(row?.settings, service, true),
-    trakt_auth: service === 'trakt' ? serializedAuth : row?.trakt_auth,
-    simkl_auth: service === 'simkl' ? serializedAuth : row?.simkl_auth,
-  });
-
+  const settings = await loadProfileSettings(profileId);
+  await patchProfileSettings(profileId, mergeSettings(settings, service, true));
   return getProfileOnboardingState(profileId);
 }
 
-function getRequiredEnvVar(value: string | undefined, label: string): string {
-  if (typeof value === 'string' && value.trim().length > 0) {
-    return value.trim();
+async function beginProviderAuth(provider: SyncService, intent: ProviderAuthIntent = {}): Promise<void> {
+  const targetProfileId = intent.targetProfileId ?? StorageService.getActiveProfileId();
+
+  if (!targetProfileId) {
+    throw new Error('Profile context is not ready yet.');
   }
 
-  throw new Error(`${label} is not configured.`);
-}
+  window.sessionStorage.setItem(PENDING_PROVIDER_AUTH_STORAGE_KEY, JSON.stringify({
+    provider,
+    targetProfileId,
+    returnTo: sanitizeReturnTo(intent.returnTo),
+    createdAt: new Date().toISOString(),
+  }));
 
-function createRandomString(byteLength = 32): string {
-  const bytes = new Uint8Array(byteLength);
-  window.crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
+  const started = await apiRequest<ProviderStartResponse>(`/v1/profiles/${encodeURIComponent(targetProfileId)}/imports/start`, {
+    method: 'POST',
+    body: jsonBody({ provider, action: 'connect' }),
+  });
 
-function toBase64Url(bytes: ArrayBuffer): string {
-  const binary = String.fromCharCode(...new Uint8Array(bytes));
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
-async function createCodeChallenge(codeVerifier: string): Promise<string> {
-  const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(codeVerifier));
-  return toBase64Url(digest);
-}
-
-function parsePendingProviderAuth(raw: string): PendingTraktAuthSession | PendingSimklAuthSession | null {
-  const parsed = JSON.parse(raw) as Record<string, unknown>;
-
-  if (parsed.provider === 'trakt') {
-    return {
-      provider: 'trakt',
-      state: typeof parsed.state === 'string' ? parsed.state : '',
-      codeVerifier: typeof parsed.codeVerifier === 'string' ? parsed.codeVerifier : '',
-      redirectUri: typeof parsed.redirectUri === 'string' ? parsed.redirectUri : '',
-      targetProfileId: typeof parsed.targetProfileId === 'string' ? parsed.targetProfileId : null,
-      returnTo: sanitizeReturnTo(typeof parsed.returnTo === 'string' ? parsed.returnTo : undefined),
-      createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : '',
-    };
+  if (started.authUrl) {
+    window.location.assign(started.authUrl);
+    return;
   }
 
-  if (parsed.provider === 'simkl') {
-    return {
-      provider: 'simkl',
-      state: typeof parsed.state === 'string' ? parsed.state : '',
-      redirectUri: typeof parsed.redirectUri === 'string' ? parsed.redirectUri : '',
-      targetProfileId: typeof parsed.targetProfileId === 'string' ? parsed.targetProfileId : null,
-      returnTo: sanitizeReturnTo(typeof parsed.returnTo === 'string' ? parsed.returnTo : undefined),
-      createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : '',
-    };
-  }
-
-  return null;
-}
-
-function savePendingProviderAuth(session: PendingTraktAuthSession | PendingSimklAuthSession): void {
-  window.sessionStorage.setItem(PENDING_PROVIDER_AUTH_STORAGE_KEY, JSON.stringify(session));
-}
-
-function readPendingProviderAuth(): PendingTraktAuthSession | PendingSimklAuthSession | null {
-  try {
-    const raw = window.sessionStorage.getItem(PENDING_PROVIDER_AUTH_STORAGE_KEY);
-
-    if (!raw) {
-      return null;
-    }
-
-    return parsePendingProviderAuth(raw);
-  } catch {
-    return null;
-  }
+  window.location.assign(sanitizeReturnTo(intent.returnTo) ?? '/dashboard');
 }
 
 export function clearPendingProviderAuth(): void {
@@ -452,206 +289,9 @@ export function clearPendingProviderAuth(): void {
 }
 
 export async function beginTraktAuth(intent: ProviderAuthIntent = {}): Promise<void> {
-  const clientId = getRequiredEnvVar(import.meta.env.VITE_TRAKT_CLIENT_ID, 'VITE_TRAKT_CLIENT_ID');
-  const redirectUri =
-    import.meta.env.VITE_TRAKT_REDIRECT_URI?.trim() || `${window.location.origin}/auth/connect/trakt`;
-  const state = createRandomString();
-  const codeVerifier = createRandomString(48);
-  const codeChallenge = await createCodeChallenge(codeVerifier);
-
-  savePendingProviderAuth({
-    provider: 'trakt',
-    state,
-    codeVerifier,
-    redirectUri,
-    targetProfileId: intent.targetProfileId ?? null,
-    returnTo: sanitizeReturnTo(intent.returnTo),
-    createdAt: new Date().toISOString(),
-  });
-
-  const authorizeUrl = new URL('https://trakt.tv/oauth/authorize');
-  authorizeUrl.searchParams.set('response_type', 'code');
-  authorizeUrl.searchParams.set('client_id', clientId);
-  authorizeUrl.searchParams.set('redirect_uri', redirectUri);
-  authorizeUrl.searchParams.set('state', state);
-  authorizeUrl.searchParams.set('code_challenge', codeChallenge);
-  authorizeUrl.searchParams.set('code_challenge_method', 'S256');
-
-  window.location.assign(authorizeUrl.toString());
-}
-
-interface TraktOAuthExchangeResponse extends Record<string, unknown> {
-  access_token: string;
-  refresh_token?: string | null;
-  token_type?: string;
-  scope?: string;
-  expires_in?: number;
-  providerUserId?: string | null;
-  providerUsername?: string | null;
-}
-
-async function exchangeTraktCode(
-  code: string,
-  codeVerifier: string,
-  redirectUri: string,
-): Promise<TraktOAuthExchangeResponse> {
-  const { data, error } = await supabase.functions.invoke(TRAKT_OAUTH_EXCHANGE_FUNCTION, {
-    body: {
-      code,
-      codeVerifier,
-      redirectUri,
-    },
-  });
-
-  if (error) {
-    throw new Error(mapSupabaseError(error, 'Unable to finish Trakt authorization.'));
-  }
-
-  if (!isRecord(data) || typeof data.access_token !== 'string') {
-    const serverMessage =
-      isRecord(data) && typeof data.error === 'string' ? data.error : null;
-    throw new Error(serverMessage ?? 'Trakt authorization returned an invalid response.');
-  }
-
-  return data as TraktOAuthExchangeResponse;
-}
-
-function buildProviderAuthPayload(
-  rawPayload: Record<string, unknown>,
-  profile: { providerUserId: string | null; providerUsername: string | null },
-): ProviderAuthPayload {
-  const expiresIn = typeof rawPayload.expires_in === 'number' ? rawPayload.expires_in : null;
-
-  return {
-    accessToken: typeof rawPayload.access_token === 'string' ? rawPayload.access_token : '',
-    refreshToken: typeof rawPayload.refresh_token === 'string' ? rawPayload.refresh_token : null,
-    tokenType: typeof rawPayload.token_type === 'string' ? rawPayload.token_type : null,
-    scope: typeof rawPayload.scope === 'string' ? rawPayload.scope : null,
-    expiresAt: expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null,
-    connectedAt: new Date().toISOString(),
-    providerUserId: profile.providerUserId,
-    providerUsername: profile.providerUsername,
-    raw: rawPayload,
-  };
-}
-
-export async function completeTraktAuthCallback(searchParams: URLSearchParams): Promise<CompletedProviderAuthResult> {
-  const pending = readPendingProviderAuth();
-  const code = searchParams.get('code');
-  const state = searchParams.get('state');
-  const providerError = searchParams.get('error');
-
-  if (!pending || pending.provider !== 'trakt') {
-    throw new Error('Trakt sign-in session expired. Please try again.');
-  }
-
-  if (providerError) {
-    clearPendingProviderAuth();
-    throw new Error(searchParams.get('error_description') ?? 'Trakt authorization was cancelled.');
-  }
-
-  if (!code || !state || state !== pending.state) {
-    clearPendingProviderAuth();
-    throw new Error('Trakt authorization response could not be verified.');
-  }
-
-  const payload = await exchangeTraktCode(code, pending.codeVerifier, pending.redirectUri);
-
-  return {
-    auth: buildProviderAuthPayload(payload, {
-      providerUserId: typeof payload.providerUserId === 'string' ? payload.providerUserId : null,
-      providerUsername: typeof payload.providerUsername === 'string' ? payload.providerUsername : null,
-    }),
-    targetProfileId: pending.targetProfileId,
-    returnTo: pending.returnTo,
-  };
+  await beginProviderAuth('trakt', intent);
 }
 
 export async function beginSimklAuth(intent: ProviderAuthIntent = {}): Promise<void> {
-  const clientId = getRequiredEnvVar(import.meta.env.VITE_SIMKL_CLIENT_ID, 'VITE_SIMKL_CLIENT_ID');
-  const redirectUri =
-    import.meta.env.VITE_SIMKL_REDIRECT_URI?.trim() || `${window.location.origin}/auth/connect/simkl`;
-  const state = createRandomString();
-  const session: PendingSimklAuthSession = {
-    provider: 'simkl',
-    state,
-    redirectUri,
-    targetProfileId: intent.targetProfileId ?? null,
-    returnTo: sanitizeReturnTo(intent.returnTo),
-    createdAt: new Date().toISOString(),
-  };
-
-  savePendingProviderAuth(session);
-
-  const authorizeUrl = new URL('https://simkl.com/oauth/authorize');
-  authorizeUrl.searchParams.set('response_type', 'code');
-  authorizeUrl.searchParams.set('client_id', clientId);
-  authorizeUrl.searchParams.set('redirect_uri', redirectUri);
-  authorizeUrl.searchParams.set('state', state);
-
-  window.location.assign(authorizeUrl.toString());
-}
-
-interface SimklOAuthExchangeResponse extends Record<string, unknown> {
-  access_token: string;
-  refresh_token?: string | null;
-  token_type?: string;
-  scope?: string;
-  expires_in?: number;
-  providerUserId?: string | null;
-  providerUsername?: string | null;
-}
-
-async function exchangeSimklCode(code: string, redirectUri: string): Promise<SimklOAuthExchangeResponse> {
-  const { data, error } = await supabase.functions.invoke(SIMKL_OAUTH_EXCHANGE_FUNCTION, {
-    body: {
-      code,
-      redirectUri,
-    },
-  });
-
-  if (error) {
-    throw new Error(mapSupabaseError(error, 'Unable to finish SIMKL authorization.'));
-  }
-
-  if (!isRecord(data) || typeof data.access_token !== 'string') {
-    const serverMessage =
-      isRecord(data) && typeof data.error === 'string' ? data.error : null;
-    throw new Error(serverMessage ?? 'SIMKL authorization returned an invalid response.');
-  }
-
-  return data as SimklOAuthExchangeResponse;
-}
-
-export async function completeSimklAuthCallback(searchParams: URLSearchParams): Promise<CompletedProviderAuthResult> {
-  const pending = readPendingProviderAuth();
-
-  if (!pending || pending.provider !== 'simkl') {
-    throw new Error('SIMKL sign-in session expired. Please try again.');
-  }
-
-  const code = searchParams.get('code');
-  const state = searchParams.get('state');
-  const providerError = searchParams.get('error');
-
-  if (providerError) {
-    clearPendingProviderAuth();
-    throw new Error(searchParams.get('error_description') ?? 'SIMKL authorization was cancelled.');
-  }
-
-  if (!code || !state || state !== pending.state) {
-    clearPendingProviderAuth();
-    throw new Error('SIMKL authorization response could not be verified.');
-  }
-
-  const payload = await exchangeSimklCode(code, pending.redirectUri);
-
-  return {
-    auth: buildProviderAuthPayload(payload, {
-      providerUserId: typeof payload.providerUserId === 'string' ? payload.providerUserId : null,
-      providerUsername: typeof payload.providerUsername === 'string' ? payload.providerUsername : null,
-    }),
-    targetProfileId: pending.targetProfileId,
-    returnTo: pending.returnTo,
-  };
+  await beginProviderAuth('simkl', intent);
 }

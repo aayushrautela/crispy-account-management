@@ -87,7 +87,7 @@ export default function Onboarding() {
     selectedSyncService,
     connectedSyncService,
     onboardingStatus,
-    refreshOnboarding,
+    refresh,
   } = useAuthStore();
   const [step, setStep] = useState<OnboardingStep>(connectedSyncService ? 'openrouter' : 'service');
   const [selectedService, setSelectedService] = useState<SyncService | null>(selectedSyncService);
@@ -141,7 +141,7 @@ export default function Onboarding() {
 
   const handleComplete = async () => {
     setFinishing(true);
-    await refreshOnboarding();
+    await refresh();
     setFinishing(false);
     navigate('/dashboard');
   };

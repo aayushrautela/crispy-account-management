@@ -1,10 +1,13 @@
-export type {
-  HouseholdRole,
-  HouseholdMemberRow,
-  HouseholdPrimaryProfileRow as HouseholdPrimaryProfile,
-  MembershipRecord,
-  ProfileRow as Profile,
-  TableInsert,
-  TableRow,
-  TableUpdate,
-} from '@crispy-streaming/supabase-contract';
+export interface Profile {
+  id: string;
+  name: string;
+  avatarKey: string | null;
+  interfaceLanguage: string;
+  region: string | null;
+  isKids: boolean;
+  sortOrder: number;
+  createdByAccountId: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+  lastActiveAt: string | null;
+}

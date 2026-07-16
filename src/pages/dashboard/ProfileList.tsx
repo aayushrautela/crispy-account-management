@@ -21,7 +21,7 @@ import {
 import traktLogo from '../../assets/brands/trakt.svg';
 import simklLogo from '../../assets/brands/simkl.svg';
 
-type ProfileRecord = Profile & { last_active_at?: string | null };
+type ProfileRecord = Profile;
 
 const serviceMeta: Record<Exclude<SyncService, null>, { label: string; logo: string; description: string }> = {
   trakt: {
@@ -166,7 +166,7 @@ function ProfileListSkeleton() {
 
 export default function ProfileList() {
   const navigate = useNavigate();
-  const { user, householdId, status } = useAuthStore();
+  const { user, accountId, status } = useAuthStore();
   const [profiles, setProfiles] = useState<ProfileRecord[]>([]);
   const [profileStates, setProfileStates] = useState<Record<string, OnboardingState>>({});
   const [primaryProfileId, setPrimaryProfileId] = useState<string | null>(null);
@@ -179,10 +179,10 @@ export default function ProfileList() {
   const [profileToDelete, setProfileToDelete] = useState<ProfileRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const canManageProfiles = status === 'authenticated' && !!householdId && !!user;
+  const canManageProfiles = status === 'authenticated' && !!accountId && !!user;
 
   const fetchProfiles = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
-    if (!canManageProfiles || !householdId) {
+    if (!canManageProfiles || !accountId) {
       setProfiles([]);
       setProfileStates({});
       setPrimaryProfileId(null);
@@ -200,12 +200,12 @@ export default function ProfileList() {
     setError(null);
 
     try {
-      const result = (await listProfiles(householdId)) as ProfileRecord[];
+      const result = (await listProfiles()) as ProfileRecord[];
       const sortedProfiles = sortProfilesByPrimaryRule(result) as ProfileRecord[];
       setProfiles(sortedProfiles);
       setProfileStates(await listProfileOnboardingStates(sortedProfiles.map((profile) => profile.id)));
 
-      const primaryProfile = await getPrimaryProfile(householdId, sortedProfiles);
+      const primaryProfile = await getPrimaryProfile(sortedProfiles);
       setPrimaryProfileId(primaryProfile?.id ?? null);
     } catch (fetchError) {
       setProfileStates({});
@@ -214,22 +214,20 @@ export default function ProfileList() {
       setIsInitialLoading(false);
       setIsRefreshing(false);
     }
-  }, [canManageProfiles, householdId]);
+  }, [canManageProfiles, accountId]);
 
   useEffect(() => {
     void fetchProfiles('initial');
   }, [fetchProfiles]);
 
-  const handleCreate = async (payload: { name: string; avatar: string | null }) => {
-    if (!householdId || !user) {
+  const handleCreate = async (payload: { name: string; avatarKey: string | null }) => {
+    if (!accountId || !user) {
       throw new Error('Account context is not ready yet.');
     }
 
     await createProfile({
-      householdId,
-      userId: user.id,
       name: payload.name,
-      avatar: payload.avatar,
+      avatarKey: payload.avatarKey,
     });
 
     await fetchProfiles('refresh');
@@ -237,16 +235,15 @@ export default function ProfileList() {
     setEditingProfile(null);
   };
 
-  const handleUpdate = async (payload: { name: string; avatar: string | null }) => {
-    if (!householdId || !editingProfile) {
+  const handleUpdate = async (payload: { name: string; avatarKey: string | null }) => {
+    if (!accountId || !editingProfile) {
       throw new Error('Profile context is missing.');
     }
 
     await updateProfile({
-      householdId,
       profileId: editingProfile.id,
       name: payload.name,
-      avatar: payload.avatar,
+      avatarKey: payload.avatarKey,
     });
 
     await fetchProfiles('refresh');
@@ -266,12 +263,12 @@ export default function ProfileList() {
   };
 
   const handleDelete = async () => {
-    if (!householdId || !profileToDelete) {
+    if (!accountId || !profileToDelete) {
       return;
     }
 
     if (profiles.length <= 1) {
-      setError('At least one profile must remain in your household.');
+      setError('At least one profile must remain in your account.');
       setProfileToDelete(null);
       return;
     }
@@ -280,7 +277,7 @@ export default function ProfileList() {
     setError(null);
 
     try {
-      await deleteProfile(householdId, profileToDelete.id);
+      await deleteProfile();
 
       if (serviceModalProfile?.id === profileToDelete.id) {
         setServiceModalProfile(null);
@@ -314,7 +311,7 @@ export default function ProfileList() {
   if (!canManageProfiles) {
     return (
       <div className="rounded-lg border border-stone-800 bg-stone-900/30 p-5 text-sm text-stone-400">
-        We could not resolve your household profile access. Reload the page if this keeps happening.
+        We could not resolve your profile access. Reload the page if this keeps happening.
       </div>
     );
   }
@@ -362,14 +359,14 @@ export default function ProfileList() {
               </div>
               <h2 className="mt-4 text-sm font-medium text-white">No profiles yet</h2>
               <p className="mx-auto mt-2 max-w-md text-sm text-stone-500">
-                Create the first household profile to start syncing watch history and profile-specific AI setup.
+                Create the first profile to start syncing watch history and profile-specific AI setup.
               </p>
             </div>
           )}
 
           <div className="flex flex-col gap-4">
             {profiles.map((profile) => {
-              const avatarUrl = resolveAvatarUrl(profile.avatar);
+              const avatarUrl = resolveAvatarUrl(profile.avatarKey);
               const isPrimary = profile.id === primaryProfileId;
               const profileState = profileStates[profile.id];
               const connectedService = profileState?.connectedService ?? null;
@@ -398,7 +395,7 @@ export default function ProfileList() {
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-stone-500">{formatLastActive(profile.last_active_at)}</p>
+                      <p className="text-sm text-stone-500">{formatLastActive(profile.lastActiveAt)}</p>
                     </div>
                   </div>
 
@@ -435,8 +432,9 @@ export default function ProfileList() {
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={() => setProfileToDelete(profile)}
-                          className="text-red-400 hover:text-red-300"
+                          disabled
+                          title="Profile deletion is not available yet."
+                          className="cursor-not-allowed text-stone-500"
                         >
                           Delete
                         </Button>

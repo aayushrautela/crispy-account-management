@@ -97,7 +97,7 @@ function SidebarContent({ pathname, userEmail, onNavigate, onSignOut, signingOut
 export default function DashboardLayout() {
   const {
     user,
-    householdId,
+    accountId,
     onboardingStatus,
     status,
     error,
@@ -105,7 +105,7 @@ export default function DashboardLayout() {
     hasInitialized,
     initialize,
     isInitializing,
-    refreshOnboarding,
+    refresh,
     signOut,
   } = useAuthStore();
   const location = useLocation();
@@ -116,7 +116,7 @@ export default function DashboardLayout() {
     return (
       <AppBootScreen
         title="Preparing your dashboard"
-        message="We are loading your household access, setup state, and dashboard shell in one pass."
+        message="We are loading your account access, setup state, and dashboard shell in one pass."
       />
     );
   }
@@ -147,12 +147,12 @@ export default function DashboardLayout() {
     return <Navigate to="/auth/login" replace />;
   }
 
-  if (!householdId) {
+  if (!accountId) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-stone-950 p-4 text-white">
         <div className="w-full max-w-md rounded-lg border border-white/5 bg-stone-900 p-6 shadow-xl">
-          <h1 className="text-xl font-semibold text-white">Unable to resolve household access</h1>
-          <p className="mt-2 text-sm text-stone-400">Your session loaded, but the household context did not finish syncing.</p>
+          <h1 className="text-xl font-semibold text-white">Unable to resolve account access</h1>
+          <p className="mt-2 text-sm text-stone-400">Your session loaded, but the account context did not finish syncing.</p>
           <div className="mt-6 flex gap-3">
             <Button
               variant="secondary"
@@ -179,7 +179,7 @@ export default function DashboardLayout() {
             <Button
               variant="secondary"
               onClick={() => {
-                void refreshOnboarding();
+                void refresh();
               }}
             >
               Retry
